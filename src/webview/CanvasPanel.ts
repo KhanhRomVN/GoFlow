@@ -189,7 +189,7 @@ export class CanvasPanel {
 
   private getWebviewContent(): string {
     const scriptUri = this.panel.webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, "media", "main.js")
+      vscode.Uri.joinPath(this.extensionUri, "media", "webview.js")
     );
     const stylesUri = this.panel.webview.asWebviewUri(
       vscode.Uri.joinPath(this.extensionUri, "media", "styles.css")
@@ -200,52 +200,12 @@ export class CanvasPanel {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${this.panel.webview.cspSource} 'unsafe-inline'; script-src ${this.panel.webview.cspSource} https://cdnjs.cloudflare.com https://cdn.jsdelivr.net 'unsafe-inline' 'unsafe-eval'; img-src ${this.panel.webview.cspSource} data:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${this.panel.webview.cspSource} 'unsafe-inline'; script-src ${this.panel.webview.cspSource} 'unsafe-inline'; img-src ${this.panel.webview.cspSource} data:;">
   <title>GoFlow Canvas</title>
   <link href="${stylesUri}" rel="stylesheet">
 </head>
 <body>
-  <div id="loading" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 20px;">
-    Loading GoFlow Canvas...
-  </div>
-  <div id="canvas" style="display: none;"></div>
-  <div id="tooltip" class="tooltip"></div>
-  <div id="controls">
-    <button id="fit-btn" title="Fit to screen">⊡</button>
-    <button id="zoom-in-btn" title="Zoom in">+</button>
-    <button id="zoom-out-btn" title="Zoom out">−</button>
-    <button id="export-btn" title="Export as PNG">💾</button>
-    <select id="layout-select">
-      <option value="dagre">Dagre</option>
-      <option value="cose">COSE</option>
-      <option value="circle">Circle</option>
-      <option value="grid">Grid</option>
-    </select>
-  </div>
-  
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js" 
-          onerror="document.getElementById('loading').innerHTML='Failed to load Cytoscape. Check internet connection.'">
-  </script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"
-          onerror="console.error('Failed to load dagre')">
-  </script>
-  <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js"
-          onerror="console.error('Failed to load cytoscape-dagre')">
-  </script>
-  <script>
-    window.addEventListener('error', function(e) {
-      document.getElementById('loading').innerHTML = 'Error: ' + e.message + '<br>Check console for details.';
-      console.error('Webview error:', e);
-    });
-    
-    // Check if cytoscape loaded
-    if (typeof cytoscape === 'undefined') {
-      document.getElementById('loading').innerHTML = 'Cytoscape failed to load. Check console.';
-    } else {
-      document.getElementById('loading').innerHTML = 'Cytoscape loaded. Initializing...';
-      document.getElementById('canvas').style.display = 'block';
-    }
-  </script>
+  <div id="root"></div>
   <script src="${scriptUri}"></script>
 </body>
 </html>`;
