@@ -1,0 +1,143 @@
+{
+  "name": "goflow",
+  "displayName": "GoFlow - Visual Go Code Navigator",
+  "description": "Visualize Go code structure as interactive canvas with function calls and dependencies",
+  "version": "0.1.0",
+  "publisher": "khanhromvn",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/khanhromvn/goflow.git"
+  },
+  "icon": "images/icon.png",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Visualization",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "go",
+    "golang",
+    "visualization",
+    "graph",
+    "code map",
+    "architecture",
+    "canvas",
+    "navigator"
+  ],
+  "activationEvents": [
+    "onLanguage:go",
+    "onCommand:goflow.showCanvas"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "goflow.showCanvas",
+        "title": "Show GoFlow Canvas",
+        "category": "GoFlow",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "goflow.refreshCanvas",
+        "title": "Refresh Canvas",
+        "category": "GoFlow",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "goflow.exportDiagram",
+        "title": "Export Diagram as PNG",
+        "category": "GoFlow",
+        "icon": "$(save)"
+      },
+      {
+        "command": "goflow.focusFunction",
+        "title": "Focus on Function",
+        "category": "GoFlow"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "goflow.showCanvas",
+          "when": "resourceLangId == go",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "goflow.showCanvas",
+          "when": "resourceLangId == go"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "goflow.showCanvas",
+        "key": "ctrl+shift+g",
+        "mac": "cmd+shift+g",
+        "when": "resourceLangId == go"
+      }
+    ],
+    "configuration": {
+      "title": "GoFlow",
+      "properties": {
+        "goflow.layout": {
+          "type": "string",
+          "enum": [
+            "dagre",
+            "cose",
+            "circle",
+            "grid"
+          ],
+          "default": "dagre",
+          "description": "Graph layout algorithm"
+        },
+        "goflow.showTypes": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show type definitions in canvas"
+        },
+        "goflow.showInterfaces": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show interface definitions in canvas"
+        },
+        "goflow.autoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "Auto-refresh canvas on file save"
+        },
+        "goflow.maxNodes": {
+          "type": "number",
+          "default": 100,
+          "description": "Maximum nodes to display (performance limit)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "lint": "eslint src",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/node": "20.x",
+    "@types/vscode": "^1.75.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.40.0",
+    "ts-loader": "^9.4.0",
+    "typescript": "^5.0.0",
+    "webpack": "^5.80.0",
+    "webpack-cli": "^5.1.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.0"
+  }
+}
