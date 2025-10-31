@@ -6,6 +6,7 @@ export interface Node {
   type: "function" | "method" | "struct" | "interface" | "unknown";
   file: string;
   line: number;
+  endLine?: number;
   kind: vscode.SymbolKind;
   code?: string;
 }

@@ -521,18 +521,29 @@ export class GoParser {
     document: vscode.TextDocument
   ): Node {
     const nodeType = this.getNodeType(symbol.kind);
-    const id = `${nodeType}_${symbol.name}`;
+    const cleanName = this.extractCleanFunctionName(symbol.name);
+    const id = `${nodeType}_${cleanName}`;
     const code = document.getText(symbol.range);
 
     return {
       id,
-      label: symbol.name,
+      label: cleanName,
       type: nodeType,
       file: document.fileName,
       line: symbol.range.start.line + 1,
+      endLine: symbol.range.end.line + 1,
       kind: symbol.kind,
       code: code,
     };
+  }
+
+  private extractCleanFunctionName(fullName: string): string {
+    const methodPattern = /\(.*?\)\s+(\w+)/;
+    const match = fullName.match(methodPattern);
+    if (match) {
+      return match[1];
+    }
+    return fullName;
   }
 
   private getNodeType(

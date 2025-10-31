@@ -33,9 +33,8 @@ interface FunctionNodeData extends Record<string, unknown> {
   type: "function" | "method";
   file: string;
   line: number;
+  endLine?: number;
   code: string;
-  isExpanded: boolean;
-  previewLines: number;
 }
 
 type FlowNode = Node<FunctionNodeData>;
@@ -106,9 +105,8 @@ const FlowCanvas: React.FC<FlowCanvasProps> = ({ vscode }) => {
           type: node.type as "function" | "method",
           file: node.file,
           line: node.line,
+          endLine: node.endLine,
           code: node.code || "",
-          isExpanded: false,
-          previewLines: PREVIEW_LINES,
         },
       }));
 
