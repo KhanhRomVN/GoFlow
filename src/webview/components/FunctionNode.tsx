@@ -1,4 +1,4 @@
-import React, { memo, useState, useMemo } from "react";
+import React, { memo, useState, useMemo, useCallback } from "react";
 import { Handle, Position, NodeProps } from "@xyflow/react";
 import MonacoCodeEditor from "./MonacoCodeEditor";
 import "../styles/function-node.css";
@@ -22,10 +22,14 @@ interface FunctionNodeData extends Record<string, unknown> {
   line: number;
   endLine?: number;
   code: string;
+  vscode?: any;
 }
 
 const FunctionNode: React.FC<NodeProps> = ({ data }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editedCode, setEditedCode] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const nodeData = data as FunctionNodeData;
 
   const getRelativePath = (fullPath: string): string => {
@@ -51,6 +55,64 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
   const totalLines = nodeData.code.split("\n").length;
   const displayCode = isExpanded ? nodeData.code : previewCode;
   const editorHeight = isExpanded ? "480px" : "220px";
+
+  const handleEditToggle = useCallback(() => {
+    console.log("[FunctionNode] Toggle edit mode:", !isEditMode);
+    if (!isEditMode) {
+      setEditedCode(nodeData.code);
+      setIsEditMode(true);
+    } else {
+      setIsEditMode(false);
+    }
+  }, [isEditMode, nodeData.code]);
+
+  const handleCodeChange = useCallback((value: string) => {
+    console.log("[FunctionNode] Code changed, length:", value.length);
+    setEditedCode(value);
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    console.log("[FunctionNode] Save button clicked");
+    console.log("[FunctionNode] File:", nodeData.file);
+    console.log("[FunctionNode] Lines:", nodeData.line, "-", nodeData.endLine);
+    console.log("[FunctionNode] New code length:", editedCode.length);
+
+    if (!nodeData.vscode) {
+      console.error("[FunctionNode] VSCode API not available");
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      nodeData.vscode.postMessage({
+        command: "saveCode",
+        file: nodeData.file,
+        startLine: nodeData.line,
+        endLine: nodeData.endLine || nodeData.line,
+        code: editedCode,
+        nodeId: nodeData.id,
+      });
+
+      console.log("[FunctionNode] Save message sent to backend");
+
+      // Wait for confirmation (will be handled by message listener in FlowGraph)
+      setTimeout(() => {
+        setIsSaving(false);
+        setIsEditMode(false);
+        console.log("[FunctionNode] Save completed (timeout)");
+      }, 1000);
+    } catch (error) {
+      console.error("[FunctionNode] Failed to save:", error);
+      setIsSaving(false);
+    }
+  }, [editedCode, nodeData]);
+
+  const handleCancel = useCallback(() => {
+    console.log("[FunctionNode] Cancel edit");
+    setIsEditMode(false);
+    setEditedCode(nodeData.code);
+  }, [nodeData.code]);
 
   return (
     <div className="function-node-container">
@@ -106,12 +168,15 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
             ? "function-node-header-function"
             : "function-node-header-method"
         }`}
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={() => !isEditMode && setIsExpanded(!isExpanded)}
       >
         <span className="function-node-type-badge">
           {nodeData.type === "function" ? "Function" : "Method"}
         </span>
         <span className="function-node-label">{nodeData.label}</span>
+        {isEditMode && (
+          <span className="function-node-edit-indicator">✏️ EDITING</span>
+        )}
       </div>
 
       <div
@@ -124,15 +189,15 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
       >
         <div className="function-node-monaco-wrapper">
           <MonacoCodeEditor
-            value={displayCode}
-            onChange={() => {}}
+            value={isEditMode ? editedCode : displayCode}
+            onChange={isEditMode ? handleCodeChange : () => {}}
             language="go"
             height={editorHeight}
-            readOnly={true}
+            readOnly={!isEditMode}
             lineNumber={nodeData.line}
           />
         </div>
-        {!isExpanded && totalLines > 10 && (
+        {!isExpanded && !isEditMode && totalLines > 10 && (
           <div className="function-node-more-lines">
             ... {totalLines - 10} more lines (click header to expand)
           </div>
@@ -144,6 +209,37 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
           📄 {getRelativePath(nodeData.file)}
         </span>
         <span className="function-node-line-badge">{getLineRange()}</span>
+
+        <div className="function-node-actions">
+          {!isEditMode ? (
+            <button
+              onClick={handleEditToggle}
+              className="function-node-action-button function-node-action-edit"
+              title="Edit code"
+            >
+              ✏️ Edit
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="function-node-action-button function-node-action-save"
+                title="Save changes"
+              >
+                {isSaving ? "💾 Saving..." : "💾 Save"}
+              </button>
+              <button
+                onClick={handleCancel}
+                disabled={isSaving}
+                className="function-node-action-button function-node-action-cancel"
+                title="Cancel edit"
+              >
+                ❌ Cancel
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

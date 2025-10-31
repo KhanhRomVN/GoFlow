@@ -30,7 +30,16 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
 }) => {
   const [isEditorReady, setIsEditorReady] = useState(false);
 
+  console.log("[MonacoCodeEditor] Props:", {
+    language,
+    height,
+    readOnly,
+    lineNumber,
+    valueLength: value?.length || 0,
+  });
+
   useEffect(() => {
+    console.log("[MonacoCodeEditor] Initializing Monaco loader");
     // Configure Monaco to load from local media/vs folder
     loader.config({
       paths: {
@@ -42,11 +51,14 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
     });
 
     loader.init().catch((err) => {
+      console.error("[MonacoCodeEditor] Failed to initialize Monaco:", err);
       console.error("Failed to initialize Monaco:", err);
     });
   }, []);
 
   const handleEditorDidMount = (editor: any, monaco: any) => {
+    console.log("[MonacoCodeEditor] Editor mounted");
+    console.log("[MonacoCodeEditor] ReadOnly mode:", readOnly);
     setIsEditorReady(true);
 
     // Get VSCode CSS variables
@@ -165,6 +177,10 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   };
 
   const handleChange = (value: string | undefined) => {
+    console.log(
+      "[MonacoCodeEditor] Content changed, new length:",
+      value?.length || 0
+    );
     if (value !== undefined) {
       onChange(value);
     }

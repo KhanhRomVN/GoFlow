@@ -292,3 +292,80 @@
 .function-node-monaco-wrapper .monaco-editor .view-lines {
   padding: 8px 0;
 }
+
+/* Edit Mode Styles */
+.function-node-edit-indicator {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fbbf24;
+  text-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
+  animation: pulse-edit 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-edit {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.function-node-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: 12px;
+}
+
+.function-node-action-button {
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.function-node-action-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.function-node-action-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.function-node-action-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.function-node-action-edit {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.function-node-action-edit:hover:not(:disabled) {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.function-node-action-save {
+  background: #10b981;
+  color: white;
+}
+
+.function-node-action-save:hover:not(:disabled) {
+  background: #059669;
+}
+
+.function-node-action-cancel {
+  background: #ef4444;
+  color: white;
+}
+
+.function-node-action-cancel:hover:not(:disabled) {
+  background: #dc2626;
+}

@@ -225,7 +225,7 @@ export class GoParser {
       };
     } catch (error) {
       Logger.error(
-        `Failed to parse function ${functionInfo.name} with dependencies`,
+        `[GoParser] Failed to parse function ${functionInfo.name} with dependencies`,
         error
       );
       throw error;

@@ -25,18 +25,46 @@ export class WebviewPanel {
 
     this.panel.webview.onDidReceiveMessage(
       async (message) => {
+        Logger.debug(`[WebviewPanel] Received message: ${message.command}`, {
+          command: message.command,
+          hasFile: !!message.file,
+          hasCode: !!message.code,
+        });
+
         switch (message.command) {
           case "jumpToDefinition":
+            Logger.info(
+              `[WebviewPanel] Jump to definition: ${message.file}:${message.line}`
+            );
             await this.jumpToDefinition(message.file, message.line);
             break;
           case "getCodePreview":
+            Logger.debug(
+              `[WebviewPanel] Get code preview for node: ${message.nodeId}`
+            );
             await this.sendCodePreview(
               message.file,
               message.line,
               message.nodeId
             );
             break;
+          case "saveCode":
+            Logger.info(
+              `[WebviewPanel] Save code request: ${message.file}:${message.startLine}-${message.endLine}`
+            );
+            Logger.debug(
+              `[WebviewPanel] New code length: ${message.code?.length || 0}`
+            );
+            await this.handleSaveCode(
+              message.file,
+              message.startLine,
+              message.endLine,
+              message.code,
+              message.nodeId
+            );
+            break;
           case "ready":
+            Logger.info("[WebviewPanel] Webview ready, sending graph data");
             const config = vscode.workspace.getConfiguration("goflow");
             this.panel.webview.postMessage({
               command: "renderGraph",
@@ -45,6 +73,9 @@ export class WebviewPanel {
                 enableJumpToFile: config.get("enableJumpToFile", true),
               },
             });
+            Logger.debug(
+              `[WebviewPanel] Sent graph: ${this.graphData.nodes.length} nodes, ${this.graphData.edges.length} edges`
+            );
             break;
           case "export":
             await this.handleExport(message.dataUrl);
@@ -123,9 +154,12 @@ export class WebviewPanel {
   }
 
   private async jumpToDefinition(file: string, line: number) {
+    Logger.info(`[WebviewPanel] Jumping to ${file}:${line}`);
     try {
       const uri = vscode.Uri.file(file);
       const document = await vscode.workspace.openTextDocument(uri);
+      Logger.debug(`[WebviewPanel] Document opened: ${file}`);
+
       const editor = await vscode.window.showTextDocument(
         document,
         vscode.ViewColumn.One
@@ -137,9 +171,111 @@ export class WebviewPanel {
         new vscode.Range(position, position),
         vscode.TextEditorRevealType.InCenter
       );
+
+      Logger.info(`[WebviewPanel] Successfully jumped to ${file}:${line}`);
     } catch (error) {
-      Logger.error("Failed to jump to definition", error);
+      Logger.error("[WebviewPanel] Failed to jump to definition", error);
       vscode.window.showErrorMessage("Failed to open file");
+    }
+  }
+
+  private async handleSaveCode(
+    file: string,
+    startLine: number,
+    endLine: number,
+    newCode: string,
+    nodeId: string
+  ) {
+    Logger.info(
+      `[WebviewPanel] Saving code to ${file}:${startLine}-${endLine}`
+    );
+    Logger.debug(`[WebviewPanel] New code:\n${newCode}`);
+
+    try {
+      const uri = vscode.Uri.file(file);
+      const document = await vscode.workspace.openTextDocument(uri);
+
+      Logger.debug(
+        `[WebviewPanel] Document opened, total lines: ${document.lineCount}`
+      );
+
+      // Validate line range
+      if (startLine < 1 || endLine > document.lineCount) {
+        const errorMsg = `Invalid line range: ${startLine}-${endLine} (document has ${document.lineCount} lines)`;
+        Logger.error(`[WebviewPanel] ${errorMsg}`);
+        vscode.window.showErrorMessage(errorMsg);
+        this.panel.webview.postMessage({
+          command: "codeUpdateFailed",
+          nodeId: nodeId,
+          error: errorMsg,
+        });
+        return;
+      }
+
+      const edit = new vscode.WorkspaceEdit();
+
+      // Convert to 0-based line numbers
+      const range = new vscode.Range(
+        new vscode.Position(startLine - 1, 0),
+        new vscode.Position(
+          endLine - 1,
+          document.lineAt(endLine - 1).text.length
+        )
+      );
+
+      Logger.debug(
+        `[WebviewPanel] Replacing range: ${range.start.line}:${range.start.character} - ${range.end.line}:${range.end.character}`
+      );
+
+      edit.replace(uri, range, newCode);
+
+      const success = await vscode.workspace.applyEdit(edit);
+
+      if (success) {
+        Logger.info(`[WebviewPanel] Code saved successfully to ${file}`);
+
+        // Save the document
+        await document.save();
+        Logger.info(`[WebviewPanel] Document saved to disk`);
+
+        vscode.window.showInformationMessage(
+          `Code updated successfully in ${file}`
+        );
+
+        this.panel.webview.postMessage({
+          command: "codeSaved",
+          nodeId: nodeId,
+        });
+
+        // Update graph data with new code
+        const nodeIndex = this.graphData.nodes.findIndex(
+          (n) => n.id === nodeId
+        );
+        if (nodeIndex !== -1) {
+          this.graphData.nodes[nodeIndex].code = newCode;
+          Logger.debug(`[WebviewPanel] Updated node ${nodeId} in graph data`);
+        }
+      } else {
+        const errorMsg = "Failed to apply code changes";
+        Logger.error(`[WebviewPanel] ${errorMsg}`);
+        vscode.window.showErrorMessage(errorMsg);
+        this.panel.webview.postMessage({
+          command: "codeUpdateFailed",
+          nodeId: nodeId,
+          error: errorMsg,
+        });
+      }
+    } catch (error) {
+      const errorMsg = `Failed to save code: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`;
+      Logger.error(`[WebviewPanel] ${errorMsg}`, error);
+      vscode.window.showErrorMessage(errorMsg);
+      this.panel.webview.postMessage({
+        command: "codeUpdateFailed",
+        nodeId: nodeId,
+        error: errorMsg,
+      });
     }
   }
 
