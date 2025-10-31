@@ -2,8 +2,8 @@ import * as vscode from "vscode";
 import { GraphData } from "../models/Node";
 import { Logger } from "../utils/logger";
 
-export class CanvasPanel {
-  private static currentPanel: CanvasPanel | undefined;
+export class WebviewPanel {
+  private static currentPanel: WebviewPanel | undefined;
   private readonly panel: vscode.WebviewPanel;
   private readonly extensionUri: vscode.Uri;
   private graphData: GraphData;
@@ -61,11 +61,11 @@ export class CanvasPanel {
   ) {
     const column = vscode.ViewColumn.Two;
 
-    if (CanvasPanel.currentPanel) {
-      CanvasPanel.currentPanel.graphData = graphData;
-      CanvasPanel.currentPanel.document = document;
-      CanvasPanel.currentPanel.panel.reveal(column);
-      CanvasPanel.currentPanel.panel.webview.postMessage({
+    if (WebviewPanel.currentPanel) {
+      WebviewPanel.currentPanel.graphData = graphData;
+      WebviewPanel.currentPanel.document = document;
+      WebviewPanel.currentPanel.panel.reveal(column);
+      WebviewPanel.currentPanel.panel.webview.postMessage({
         command: "renderGraph",
         data: graphData,
       });
@@ -83,7 +83,7 @@ export class CanvasPanel {
       }
     );
 
-    CanvasPanel.currentPanel = new CanvasPanel(
+    WebviewPanel.currentPanel = new WebviewPanel(
       panel,
       extensionUri,
       graphData,
@@ -92,29 +92,29 @@ export class CanvasPanel {
   }
 
   public static refresh() {
-    if (CanvasPanel.currentPanel) {
-      CanvasPanel.currentPanel.panel.webview.postMessage({
+    if (WebviewPanel.currentPanel) {
+      WebviewPanel.currentPanel.panel.webview.postMessage({
         command: "refresh",
       });
     }
   }
 
   public static exportDiagram() {
-    if (CanvasPanel.currentPanel) {
-      CanvasPanel.currentPanel.panel.webview.postMessage({
+    if (WebviewPanel.currentPanel) {
+      WebviewPanel.currentPanel.panel.webview.postMessage({
         command: "exportRequest",
       });
     }
   }
 
   public static isVisible(): boolean {
-    return CanvasPanel.currentPanel !== undefined;
+    return WebviewPanel.currentPanel !== undefined;
   }
 
   public static dispose() {
-    if (CanvasPanel.currentPanel) {
-      CanvasPanel.currentPanel.panel.dispose();
-      CanvasPanel.currentPanel = undefined;
+    if (WebviewPanel.currentPanel) {
+      WebviewPanel.currentPanel.panel.dispose();
+      WebviewPanel.currentPanel = undefined;
     }
   }
 
@@ -213,7 +213,7 @@ export class CanvasPanel {
   }
 
   private dispose() {
-    CanvasPanel.currentPanel = undefined;
+    WebviewPanel.currentPanel = undefined;
     this.panel.dispose();
 
     while (this.disposables.length) {

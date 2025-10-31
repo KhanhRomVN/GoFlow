@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { CanvasPanel } from "./webview/CanvasPanel";
+import { WebviewPanel } from "./webview/WebviewPanel";
 import { GoParser } from "./parser/GoParser";
 import { Logger, LogLevel } from "./utils/logger";
 import { FlowManager } from "./managers/FlowManager";
@@ -95,7 +95,7 @@ export function activate(context: vscode.ExtensionContext) {
 
             progress.report({ increment: 80, message: "Rendering canvas..." });
 
-            CanvasPanel.render(
+            WebviewPanel.render(
               context.extensionUri,
               graphData,
               editor.document
@@ -124,14 +124,14 @@ export function activate(context: vscode.ExtensionContext) {
   const refreshCanvasCommand = vscode.commands.registerCommand(
     "goflow.refreshCanvas",
     () => {
-      CanvasPanel.refresh();
+      WebviewPanel.refresh();
     }
   );
 
   const exportDiagramCommand = vscode.commands.registerCommand(
     "goflow.exportDiagram",
     () => {
-      CanvasPanel.exportDiagram();
+      WebviewPanel.exportDiagram();
     }
   );
 
@@ -259,7 +259,7 @@ export function activate(context: vscode.ExtensionContext) {
 
             progress.report({ increment: 80 });
 
-            CanvasPanel.render(context.extensionUri, graphData, document);
+            WebviewPanel.render(context.extensionUri, graphData, document);
 
             progress.report({ increment: 100 });
 
@@ -325,7 +325,7 @@ export function activate(context: vscode.ExtensionContext) {
   const config = vscode.workspace.getConfiguration("goflow");
   if (config.get("autoRefresh")) {
     const autoRefresh = vscode.workspace.onDidSaveTextDocument((document) => {
-      if (document.languageId === "go" && CanvasPanel.isVisible()) {
+      if (document.languageId === "go" && WebviewPanel.isVisible()) {
         vscode.commands.executeCommand("goflow.refreshCanvas");
       }
     });
@@ -336,7 +336,7 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {
-  CanvasPanel.dispose();
+  WebviewPanel.dispose();
   Logger.dispose();
 }
 
