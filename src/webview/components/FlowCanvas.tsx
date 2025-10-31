@@ -189,8 +189,10 @@ const FlowCanvas: React.FC<FlowCanvasProps> = ({ vscode }) => {
   return (
     <div style={{ width: "100vw", height: "100vh" }}>
       {isLoading ? (
-        <div className="loading-container">
-          <div className="loading-text">Loading GoFlow Canvas...</div>
+        <div className="flex justify-center items-center w-screen h-screen bg-[var(--vscode-editor-background)]">
+          <div className="text-[var(--vscode-editor-foreground)] text-xl font-medium">
+            Loading GoFlow Canvas...
+          </div>
         </div>
       ) : (
         <ReactFlow
@@ -215,17 +217,20 @@ const FlowCanvas: React.FC<FlowCanvasProps> = ({ vscode }) => {
             zoomable
             pannable
           />
-          <Panel position="top-right" className="control-panel">
+          <Panel
+            position="top-right"
+            className="flex gap-2 bg-[var(--vscode-editor-background)] border border-[var(--vscode-panel-border)] rounded-lg p-2 shadow-lg"
+          >
             <button
               onClick={handleFit}
-              className="control-btn"
+              className="bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] border-none px-3 py-2 rounded cursor-pointer text-base transition-all min-w-[36px] h-9 hover:bg-[var(--vscode-button-hoverBackground)] hover:scale-105 active:scale-95"
               title="Fit view"
             >
               ⊡
             </button>
             <button
               onClick={handleExport}
-              className="control-btn"
+              className="bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] border-none px-3 py-2 rounded cursor-pointer text-base transition-all min-w-[36px] h-9 hover:bg-[var(--vscode-button-hoverBackground)] hover:scale-105 active:scale-95"
               title="Export"
             >
               💾

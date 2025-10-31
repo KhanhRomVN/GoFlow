@@ -2,8 +2,8 @@ import React, { memo, useState, useMemo } from "react";
 import { Handle, Position, NodeProps } from "@xyflow/react";
 
 const NODE_COLORS = {
-  function: "from-green-600 to-emerald-600",
-  method: "from-blue-600 to-cyan-600",
+  function: "bg-gradient-to-r from-green-600 to-emerald-600",
+  method: "bg-gradient-to-r from-blue-600 to-cyan-600",
 } as const;
 
 interface FunctionNodeData extends Record<string, unknown> {
@@ -38,7 +38,6 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
     return `Line ${nodeData.line}`;
   };
 
-  // Phân tích code để tìm function calls và vị trí của chúng
   const functionCalls = useMemo((): FunctionCall[] => {
     if (!nodeData.code) return [];
 
@@ -50,7 +49,6 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
       let match;
       while ((match = functionCallRegex.exec(line)) !== null) {
         const functionName = match[1];
-        // Bỏ qua keywords và built-in functions
         const skipKeywords = [
           "if",
           "for",
@@ -77,14 +75,13 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
     return calls;
   }, [nodeData.code, nodeData.line]);
 
-  // Tính toán vị trí Y cho mỗi handle dựa trên line number
   const calculateHandlePosition = (lineIndex: number): number => {
     const totalLines = nodeData.code.split("\n").length;
     const visibleLines = isExpanded ? totalLines : Math.min(10, totalLines);
-    const headerHeight = 56; // px
-    const footerHeight = 48; // px
-    const lineHeight = 19.2; // px (font-size 12px * line-height 1.6)
-    const bodyPadding = 24; // 12px top + 12px bottom
+    const headerHeight = 56;
+    const footerHeight = 48;
+    const lineHeight = 19.2;
+    const bodyPadding = 24;
 
     const bodyHeight = visibleLines * lineHeight + bodyPadding;
     const relativePosition = lineIndex / totalLines;
@@ -94,7 +91,6 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
 
   const nodeColor = NODE_COLORS[nodeData.type];
 
-  // Lấy preview code (10 dòng đầu)
   const previewCode = useMemo(() => {
     if (!nodeData.code) return "";
     const lines = nodeData.code.split("\n");
@@ -105,8 +101,7 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
   const displayCode = isExpanded ? nodeData.code : previewCode;
 
   return (
-    <div className="function-node">
-      {/* Handle Input - Top Center */}
+    <div className="bg-[var(--vscode-editor-background)] border-2 border-[var(--vscode-panel-border)] rounded-lg w-80 shadow-lg overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5">
       <Handle
         type="target"
         position={Position.Top}
@@ -119,17 +114,18 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
         }}
       />
 
-      {/* Header - Single Row */}
       <div
-        className={`function-node-header bg-gradient-to-r ${nodeColor}`}
+        className={`flex items-center gap-2 px-4 py-3 text-white border-b-2 border-black/20 cursor-pointer select-none min-h-[56px] ${nodeColor} hover:brightness-110`}
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <span className="function-node-badge">
+        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 bg-black/25 rounded flex-shrink-0">
           {nodeData.type === "function" ? "Function" : "Method"}
         </span>
-        <span className="function-node-title">{nodeData.label}</span>
+        <span className="font-semibold text-sm whitespace-nowrap overflow-hidden text-ellipsis flex-1 font-mono">
+          {nodeData.label}
+        </span>
         <button
-          className="function-node-expand-btn"
+          className="bg-black/20 border-none text-white w-7 h-7 flex items-center justify-center cursor-pointer text-base font-bold rounded transition-all flex-shrink-0 hover:bg-black/35 hover:scale-110"
           onClick={(e) => {
             e.stopPropagation();
             setIsExpanded(!isExpanded);
@@ -139,31 +135,33 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
         </button>
       </div>
 
-      {/* Body - Code Preview */}
       <div
-        className={`function-node-body ${
-          isExpanded ? "expanded" : "collapsed"
+        className={`bg-[var(--vscode-editor-background)] overflow-hidden transition-all duration-300 ${
+          isExpanded ? "max-h-[600px] overflow-y-auto" : "max-h-60"
         }`}
       >
-        <pre className="function-node-code">
-          <code className="language-go">{displayCode}</code>
+        <pre className="m-0 p-3 font-mono text-xs leading-relaxed text-[var(--vscode-editor-foreground)] bg-[var(--vscode-editor-background)] overflow-x-auto">
+          <code className="language-go whitespace-pre">{displayCode}</code>
         </pre>
         {!isExpanded && totalLines > 10 && (
-          <div className="function-node-more">
+          <div className="text-center py-2 bg-[var(--vscode-editor-background)] border-t border-[var(--vscode-panel-border)] text-[11px] text-[var(--vscode-descriptionForeground)] italic">
             <span>+{totalLines - 10} more lines</span>
           </div>
         )}
       </div>
 
-      {/* Footer - Path and Line Info */}
-      <div className="function-node-footer">
-        <span className="function-node-path" title={nodeData.file}>
+      <div className="flex items-center justify-between gap-2 px-4 py-3 bg-[var(--vscode-editorWidget-background)] border-t border-[var(--vscode-panel-border)] min-h-[48px]">
+        <span
+          className="text-[11px] text-[var(--vscode-descriptionForeground)] whitespace-nowrap overflow-hidden text-ellipsis flex-1 min-w-0"
+          title={nodeData.file}
+        >
           📄 {getRelativePath(nodeData.file)}
         </span>
-        <span className="function-node-line-range">{getLineRange()}</span>
+        <span className="font-mono text-[10px] font-semibold bg-[var(--vscode-badge-background)] text-[var(--vscode-badge-foreground)] px-2 py-1 rounded flex-shrink-0">
+          {getLineRange()}
+        </span>
       </div>
 
-      {/* Multiple Handles - Right Side (for each function call) */}
       {functionCalls.map((call, index) => (
         <Handle
           key={`call-${index}-${call.lineIndex}`}
@@ -182,7 +180,6 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
         />
       ))}
 
-      {/* Default Bottom Handle (fallback nếu không có function calls) */}
       {functionCalls.length === 0 && (
         <Handle
           type="source"

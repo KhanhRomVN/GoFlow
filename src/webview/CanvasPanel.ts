@@ -200,8 +200,9 @@ export class CanvasPanel {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${this.panel.webview.cspSource} 'unsafe-inline'; font-src ${this.panel.webview.cspSource}; script-src ${this.panel.webview.cspSource} 'unsafe-inline' 'unsafe-eval'; img-src ${this.panel.webview.cspSource} data:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${this.panel.webview.cspSource} 'unsafe-inline' https://cdn.jsdelivr.net; font-src ${this.panel.webview.cspSource}; script-src ${this.panel.webview.cspSource} 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; img-src ${this.panel.webview.cspSource} data:;">
   <title>GoFlow Canvas</title>
+  <script src="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.1/lib/index.min.js"></script>
   <link href="${stylesUri}" rel="stylesheet">
 </head>
 <body>
