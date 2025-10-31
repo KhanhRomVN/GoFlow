@@ -66,15 +66,31 @@ export class WebviewPanel {
           case "ready":
             Logger.info("[WebviewPanel] Webview ready, sending graph data");
             const config = vscode.workspace.getConfiguration("goflow");
+
+            // Get VSCode theme colors
+            const isDark =
+              vscode.window.activeColorTheme.kind ===
+                vscode.ColorThemeKind.Dark ||
+              vscode.window.activeColorTheme.kind ===
+                vscode.ColorThemeKind.HighContrast;
+
             this.panel.webview.postMessage({
               command: "renderGraph",
               data: this.graphData,
               config: {
                 enableJumpToFile: config.get("enableJumpToFile", true),
               },
+              theme: {
+                isDark: isDark,
+                kind: vscode.window.activeColorTheme.kind,
+              },
             });
             Logger.debug(
-              `[WebviewPanel] Sent graph: ${this.graphData.nodes.length} nodes, ${this.graphData.edges.length} edges`
+              `[WebviewPanel] Sent graph: ${
+                this.graphData.nodes.length
+              } nodes, ${this.graphData.edges.length} edges, theme: ${
+                isDark ? "dark" : "light"
+              }`
             );
             break;
           case "export":
@@ -385,7 +401,6 @@ export class WebviewPanel {
     };
   </script>
   <script src="${vsUri}/loader.js"></script>
-  <script src="${vsUri}/editor/editor.main.nls.js"></script>
   <script src="${vsUri}/editor/editor.main.js"></script>
 </head>
 <body>

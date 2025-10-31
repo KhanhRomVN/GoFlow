@@ -1,0 +1,77 @@
+
+/* ===================================
+   OVERRIDE REACT FLOW NODE WIDTH
+   =================================== */
+
+.react-flow__node {
+  width: fit-content !important;
+  min-width: 600px;
+  max-width: 1200px !important;
+}
+
+/* ===================================
+   MINIMAL CSS - REACT FLOW OVERRIDES ONLY
+   (All component styling moved to Tailwind)
+   =================================== */
+
+/* React Flow Node Selection */
+.react-flow__node.selected .function-node {
+  border-color: #FFC107 !important;
+  box-shadow: 0 0 0 2px #FFC107, 0 6px 16px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* React Flow Edge Styling */
+.react-flow__edge-path {
+  stroke: #666;
+  stroke-width: 2;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: #FFC107;
+  stroke-width: 3;
+}
+
+/* React Flow MiniMap */
+.react-flow__minimap {
+  background: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-panel-border);
+}
+
+/* React Flow Controls */
+.react-flow__controls {
+  background: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-panel-border);
+}
+
+.react-flow__controls-button {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.react-flow__controls-button:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+/* Custom Scrollbar for Expanded Node Body */
+.function-node-body-expanded::-webkit-scrollbar {
+  width: 8px;
+}
+
+.function-node-body-expanded::-webkit-scrollbar-track {
+  background: var(--vscode-scrollbarSlider-background);
+}
+
+.function-node-body-expanded::-webkit-scrollbar-thumb {
+  background: var(--vscode-scrollbarSlider-hoverBackground);
+  border-radius: 4px;
+}
+
+.function-node-body-expanded::-webkit-scrollbar-thumb:hover {
+  background: var(--vscode-scrollbarSlider-activeBackground);
+}
+
+/* React Flow Node Cursor */
+.react-flow__node {
+  cursor: pointer;
+}

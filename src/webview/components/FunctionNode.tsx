@@ -9,6 +9,7 @@ import React, {
 import { Handle, Position, NodeProps } from "@xyflow/react";
 import MonacoCodeEditor from "./MonacoCodeEditor";
 import "../styles/function-node.css";
+import { Logger } from "../../utils/webviewLogger";
 
 const NODE_COLORS = {
   function: {
@@ -64,7 +65,7 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
 
   const handleCodeChange = useCallback(
     (value: string) => {
-      console.log("[FunctionNode] Code changed, length:", value.length);
+      Logger.info("[FunctionNode] Code changed, length:", value.length);
 
       // Clear previous timeout
       if (saveTimeoutRef.current) {
@@ -73,13 +74,10 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
 
       // Debounce auto-save after 1.5 seconds
       saveTimeoutRef.current = setTimeout(async () => {
-        console.log("[FunctionNode] Auto-saving code...");
-        console.log("[FunctionNode] File:", nodeData.file);
-        console.log(
-          "[FunctionNode] Lines:",
-          nodeData.line,
-          "-",
-          nodeData.endLine
+        Logger.info("[FunctionNode] Auto-saving code...");
+        Logger.info(`[FunctionNode] File: ${nodeData.file}`);
+        Logger.info(
+          `[FunctionNode] Lines: ${nodeData.line}-${nodeData.endLine}`
         );
 
         if (!nodeData.vscode) {
@@ -99,12 +97,12 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
             nodeId: nodeData.id,
           });
 
-          console.log("[FunctionNode] Auto-save message sent to backend");
+          Logger.info("[FunctionNode] Auto-save message sent to backend");
 
           // Reset saving indicator after 1 second
           setTimeout(() => {
             setIsSaving(false);
-            console.log("[FunctionNode] Auto-save completed");
+            Logger.info("[FunctionNode] Auto-save completed");
           }, 1000);
         } catch (error) {
           console.error("[FunctionNode] Failed to auto-save:", error);

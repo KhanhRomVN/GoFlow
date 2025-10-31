@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import Editor, { loader } from "@monaco-editor/react";
+import { Logger } from "../../utils/webviewLogger";
 
 // Configure Monaco to use local workers in VSCode webview
 declare global {
@@ -30,7 +31,7 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
 }) => {
   const [isEditorReady, setIsEditorReady] = useState(false);
 
-  console.log("[MonacoCodeEditor] Props:", {
+  Logger.info("[MonacoCodeEditor] Props:", {
     language,
     height,
     readOnly,
@@ -39,136 +40,55 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   });
 
   useEffect(() => {
-    console.log("[MonacoCodeEditor] Initializing Monaco loader");
-    // Configure Monaco to load from local media/vs folder
-    loader.config({
-      paths: {
-        vs: "./vs",
-      },
-      "vs/nls": {
-        availableLanguages: {},
-      },
-    });
+    Logger.info("[MonacoCodeEditor] Initializing Monaco loader");
+    Logger.info(
+      "[MonacoCodeEditor] Window.MonacoEnvironment:",
+      window.MonacoEnvironment
+    );
 
-    loader.init().catch((err) => {
-      console.error("[MonacoCodeEditor] Failed to initialize Monaco:", err);
-      console.error("Failed to initialize Monaco:", err);
-    });
+    // Configure Monaco to load from local media/vs folder
+    try {
+      loader.config({
+        paths: {
+          vs: "./vs",
+        },
+        "vs/nls": {
+          availableLanguages: {},
+        },
+      });
+
+      loader
+        .init()
+        .then(() => {
+          Logger.info("[MonacoCodeEditor] Monaco initialized successfully");
+        })
+        .catch((err) => {
+          console.error("[MonacoCodeEditor] Failed to initialize Monaco:", err);
+          console.error("[MonacoCodeEditor] Stack:", err?.stack);
+        });
+    } catch (err) {
+      console.error("[MonacoCodeEditor] Exception during Monaco config:", err);
+    }
   }, []);
 
   const handleEditorDidMount = (editor: any, monaco: any) => {
-    console.log("[MonacoCodeEditor] Editor mounted");
-    console.log("[MonacoCodeEditor] ReadOnly mode:", readOnly);
+    Logger.info("[MonacoCodeEditor] Editor mounted");
+    Logger.info("[MonacoCodeEditor] ReadOnly mode:", readOnly);
     setIsEditorReady(true);
 
-    // Get VSCode CSS variables
-    const bodyStyles = getComputedStyle(document.body);
-    const getColor = (varName: string, fallback: string) => {
-      const color = bodyStyles.getPropertyValue(varName).trim();
-      return color || fallback;
+    // Get theme info from window (stored by FlowGraph)
+    const themeInfo = (window as any).__goflowTheme || {
+      isDark: true,
+      kind: 1, // Default to dark
     };
 
-    // Detect if dark theme
-    const bgColor = getColor("--vscode-editor-background", "#1e1e1e");
-    const isDark =
-      bgColor.startsWith("#") && parseInt(bgColor.slice(1, 3), 16) < 128;
+    Logger.info("[MonacoCodeEditor] Using theme:", themeInfo);
 
-    // Define custom theme based on VSCode colors
-    monaco.editor.defineTheme("vscode-custom", {
-      base: isDark ? "vs-dark" : "vs",
-      inherit: true,
-      rules: [
-        {
-          token: "keyword",
-          foreground: getColor(
-            "--vscode-symbolIcon-keywordForeground",
-            "569cd6"
-          ).replace("#", ""),
-          fontStyle: "bold",
-        },
-        {
-          token: "type",
-          foreground: getColor(
-            "--vscode-symbolIcon-classForeground",
-            "4ec9b0"
-          ).replace("#", ""),
-        },
-        {
-          token: "string",
-          foreground: getColor(
-            "--vscode-symbolIcon-stringForeground",
-            "ce9178"
-          ).replace("#", ""),
-        },
-        {
-          token: "comment",
-          foreground: getColor(
-            "--vscode-symbolIcon-variableForeground",
-            "6a9955"
-          ).replace("#", ""),
-          fontStyle: "italic",
-        },
-        {
-          token: "number",
-          foreground: getColor(
-            "--vscode-symbolIcon-numberForeground",
-            "b5cea8"
-          ).replace("#", ""),
-        },
-        {
-          token: "function",
-          foreground: getColor(
-            "--vscode-symbolIcon-functionForeground",
-            "dcdcaa"
-          ).replace("#", ""),
-        },
-        {
-          token: "variable",
-          foreground: getColor("--vscode-editor-foreground", "d4d4d4").replace(
-            "#",
-            ""
-          ),
-        },
-        {
-          token: "identifier",
-          foreground: getColor("--vscode-editor-foreground", "d4d4d4").replace(
-            "#",
-            ""
-          ),
-        },
-      ],
-      colors: {
-        "editor.background": getColor("--vscode-editor-background", "#1e1e1e"),
-        "editor.foreground": getColor("--vscode-editor-foreground", "#d4d4d4"),
-        "editor.lineHighlightBackground": getColor(
-          "--vscode-editor-lineHighlightBackground",
-          "#2a2d2e"
-        ),
-        "editorLineNumber.foreground": getColor(
-          "--vscode-editorLineNumber-foreground",
-          "#858585"
-        ),
-        "editorLineNumber.activeForeground": getColor(
-          "--vscode-editorLineNumber-activeForeground",
-          "#c6c6c6"
-        ),
-        "editor.selectionBackground": getColor(
-          "--vscode-editor-selectionBackground",
-          "#264f78"
-        ),
-        "editor.inactiveSelectionBackground": getColor(
-          "--vscode-editor-inactiveSelectionBackground",
-          "#3a3d41"
-        ),
-        "editorCursor.foreground": getColor(
-          "--vscode-editorCursor-foreground",
-          "#aeafad"
-        ),
-      },
-    });
+    // Simply use Monaco's built-in themes that match VSCode
+    const themeName = themeInfo.isDark ? "vs-dark" : "vs";
+    monaco.editor.setTheme(themeName);
 
-    // Apply custom theme
-    monaco.editor.setTheme("vscode-custom");
+    Logger.info("[MonacoCodeEditor] Applied theme:", themeName);
 
     // Set line number offset if needed
     if (lineNumber > 1) {
@@ -177,7 +97,7 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   };
 
   const handleChange = (value: string | undefined) => {
-    console.log(
+    Logger.info(
       "[MonacoCodeEditor] Content changed, new length:",
       value?.length || 0
     );

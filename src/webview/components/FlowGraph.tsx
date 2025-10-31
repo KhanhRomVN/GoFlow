@@ -17,6 +17,7 @@ import "../styles/flow-graph.css";
 
 import FunctionNode from "./FunctionNode";
 import { GraphData } from "../../models/Node";
+import { Logger } from "../../utils/webviewLogger";
 
 const NODE_COLORS = {
   function: "#4CAF50",
@@ -48,16 +49,20 @@ const nodeTypes = {
   functionNode: FunctionNode as React.ComponentType<any>,
 };
 
-console.log(
+Logger.info(
   "[GoFlow Debug] FlowGraph - NodeTypes registered:",
   Object.keys(nodeTypes)
 );
 
 const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
+  Logger.info("[FlowGraph] Component mounting...");
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<FlowEdge>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [enableJumpToFile, setEnableJumpToFile] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  Logger.info("[FlowGraph] Initial state - isLoading:", isLoading);
 
   const getLayoutedElements = (
     nodes: FlowNode[],
@@ -146,12 +151,32 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
 
   const renderGraph = useCallback(
     (data: GraphData) => {
-      const { nodes: flowNodes, edges: flowEdges } = convertToFlowData(data);
-      const { nodes: layoutedNodes, edges: layoutedEdges } =
-        getLayoutedElements(flowNodes, flowEdges);
-      setNodes(layoutedNodes);
-      setEdges(layoutedEdges);
-      setIsLoading(false);
+      try {
+        Logger.info("[FlowGraph] renderGraph called with data:", {
+          nodes: data.nodes.length,
+          edges: data.edges.length,
+        });
+
+        const { nodes: flowNodes, edges: flowEdges } = convertToFlowData(data);
+        Logger.info("[FlowGraph] Converted to flow data:", {
+          flowNodes: flowNodes.length,
+          flowEdges: flowEdges.length,
+        });
+
+        const { nodes: layoutedNodes, edges: layoutedEdges } =
+          getLayoutedElements(flowNodes, flowEdges);
+        Logger.info("[FlowGraph] Layout completed");
+
+        setNodes(layoutedNodes);
+        setEdges(layoutedEdges);
+        setIsLoading(false);
+        setError(null);
+        Logger.info("[FlowGraph] Graph rendered successfully");
+      } catch (err) {
+        console.error("[FlowGraph] Failed to render graph:", err);
+        setError(err instanceof Error ? err.message : "Unknown error");
+        setIsLoading(false);
+      }
     },
     [setNodes, setEdges]
   );
@@ -182,62 +207,71 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
   }, [vscode]);
 
   useEffect(() => {
+    Logger.info("[FlowGraph] Setting up message handler");
+
     const messageHandler = (event: MessageEvent) => {
+      Logger.info("[FlowGraph] Message received:", event.data?.command);
       const message = event.data;
-      switch (message.command) {
-        case "renderGraph":
-          if (message.config) {
-            setEnableJumpToFile(message.config.enableJumpToFile);
-          }
-          renderGraph(message.data);
-          break;
-        case "refresh":
-          if (message.data) {
+
+      try {
+        switch (message.command) {
+          case "renderGraph":
+            Logger.info("[FlowGraph] renderGraph command received");
+            if (message.config) {
+              setEnableJumpToFile(message.config.enableJumpToFile);
+            }
+            if (message.theme) {
+              // Store theme in window instead of vscode object
+              (window as any).__goflowTheme = message.theme;
+              Logger.info("[FlowGraph] Theme received:", message.theme);
+            }
             renderGraph(message.data);
-          }
-          break;
+            break;
+          case "refresh":
+            Logger.info("[FlowGraph] refresh command received");
+            if (message.data) {
+              renderGraph(message.data);
+            }
+            break;
+          default:
+            Logger.info("[FlowGraph] Unknown command:", message.command);
+        }
+      } catch (err) {
+        console.error("[FlowGraph] Error handling message:", err);
+        setError(err instanceof Error ? err.message : "Unknown error");
+        setIsLoading(false);
       }
     };
 
     window.addEventListener("message", messageHandler);
+    Logger.info("[FlowGraph] Sending ready message to backend");
     vscode.postMessage({ command: "ready" });
 
     return () => {
-      window.removeEventListener("message", messageHandler);
-    };
-  }, [renderGraph, vscode]);
-
-  useEffect(() => {
-    const messageHandler = (event: MessageEvent) => {
-      const message = event.data;
-      switch (message.command) {
-        case "renderGraph":
-          if (message.config) {
-            setEnableJumpToFile(message.config.enableJumpToFile);
-          }
-          renderGraph(message.data);
-          break;
-        case "refresh":
-          if (message.data) {
-            renderGraph(message.data);
-          }
-          break;
-      }
-    };
-
-    window.addEventListener("message", messageHandler);
-    vscode.postMessage({ command: "ready" });
-
-    return () => {
+      Logger.info("[FlowGraph] Cleaning up message handler");
       window.removeEventListener("message", messageHandler);
     };
   }, [renderGraph, vscode]);
 
   return (
     <div style={{ width: "100vw", height: "100vh" }}>
-      {isLoading ? (
+      {error ? (
         <div className="loading-container">
-          <div className="loading-text">Loading GoFlow Canvas...</div>
+          <div className="loading-text" style={{ color: "#ef4444" }}>
+            ❌ Error: {error}
+            <div style={{ marginTop: "16px", fontSize: "14px" }}>
+              Check the browser console (F12) for details
+            </div>
+          </div>
+        </div>
+      ) : isLoading ? (
+        <div className="loading-container">
+          <div className="loading-text">
+            Loading GoFlow Canvas...
+            <div style={{ marginTop: "8px", fontSize: "12px", opacity: 0.7 }}>
+              If this takes too long, check the console
+            </div>
+          </div>
         </div>
       ) : (
         <ReactFlow
