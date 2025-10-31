@@ -1,3 +1,14 @@
+
+/* ===================================
+   OVERRIDE REACT FLOW NODE WIDTH
+   =================================== */
+
+.react-flow__node {
+  width: fit-content !important;
+  min-width: 600px;
+  max-width: 1200px !important;
+}
+
 /* ===================================
    MINIMAL CSS - REACT FLOW OVERRIDES ONLY
    (All component styling moved to Tailwind)

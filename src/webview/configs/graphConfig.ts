@@ -3,6 +3,6 @@ export const NODE_COLORS = {
   method: "#2196F3",
 } as const;
 
-export const DEFAULT_NODE_WIDTH = 320;
-export const DEFAULT_NODE_HEIGHT = 180;
-export const PREVIEW_LINES = 8;
+export const DEFAULT_NODE_WIDTH = 600;
+export const DEFAULT_NODE_HEIGHT = 250;
+export const PREVIEW_LINES = 10;

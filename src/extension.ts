@@ -7,7 +7,6 @@ import { FlowTreeDataProvider } from "./views/FlowTreeDataProvider";
 
 export function activate(context: vscode.ExtensionContext) {
   Logger.initialize(LogLevel.DEBUG);
-  Logger.info("GoFlow extension activating...");
 
   const flowManager = FlowManager.initialize(context);
   const goParser = new GoParser();
@@ -108,8 +107,6 @@ export function activate(context: vscode.ExtensionContext) {
             );
           }
         );
-
-        Logger.info(`Canvas opened for: ${editor.document.fileName}`);
       } catch (error) {
         Logger.error("Failed to show canvas", error);
         vscode.window.showErrorMessage(
@@ -331,8 +328,6 @@ export function activate(context: vscode.ExtensionContext) {
     });
     context.subscriptions.push(autoRefresh);
   }
-
-  Logger.info("GoFlow extension activated successfully");
 }
 
 export function deactivate() {
@@ -360,9 +355,8 @@ async function findPackageFiles(
           try {
             const doc = await vscode.workspace.openTextDocument(fileUri);
             files.push(doc);
-            Logger.debug(`Added package file: ${name}`);
           } catch (error) {
-            Logger.debug(`Could not open file: ${name}`);
+            Logger.error(`Could not open file: ${name}`);
           }
         }
       }
@@ -371,7 +365,6 @@ async function findPackageFiles(
     Logger.error("Failed to read package directory", error);
   }
 
-  Logger.info(`Found ${files.length} files in package`);
   return files;
 }
 
@@ -394,8 +387,6 @@ async function findWorkspaceFiles(
       50
     );
 
-    Logger.info(`Found ${goFiles.length} Go files in workspace`);
-
     for (const uri of goFiles) {
       if (
         uri.fsPath !== document.uri.fsPath &&
@@ -405,7 +396,7 @@ async function findWorkspaceFiles(
           const doc = await vscode.workspace.openTextDocument(uri);
           files.push(doc);
         } catch (error) {
-          Logger.debug(`Could not open workspace file: ${uri.fsPath}`);
+          Logger.error(`Could not open workspace file: ${uri.fsPath}`);
         }
       }
     }
@@ -413,7 +404,6 @@ async function findWorkspaceFiles(
     Logger.error("Failed to find workspace files", error);
   }
 
-  Logger.info(`Total ${files.length} files selected for analysis`);
   return files;
 }
 

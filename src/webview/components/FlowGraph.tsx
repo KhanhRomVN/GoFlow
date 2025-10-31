@@ -12,6 +12,8 @@ import {
 } from "@xyflow/react";
 import dagre from "dagre";
 import "@xyflow/react/dist/style.css";
+import "../styles/common.css";
+import "../styles/flow-graph.css";
 
 import FunctionNode from "./FunctionNode";
 import { GraphData } from "../../models/Node";
@@ -55,6 +57,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<FlowEdge>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [enableJumpToFile, setEnableJumpToFile] = useState(true);
 
   const getLayoutedElements = (
     nodes: FlowNode[],
@@ -65,17 +68,17 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
 
     dagreGraph.setGraph({
       rankdir: "LR",
-      ranksep: 150,
-      nodesep: 100,
-      edgesep: 50,
-      marginx: 50,
-      marginy: 50,
+      ranksep: 250,
+      nodesep: 180,
+      edgesep: 60,
+      marginx: 80,
+      marginy: 80,
     });
 
     nodes.forEach((node) => {
       dagreGraph.setNode(node.id, {
-        width: DEFAULT_NODE_WIDTH,
-        height: DEFAULT_NODE_HEIGHT,
+        width: 650,
+        height: 280,
       });
     });
 
@@ -90,8 +93,11 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
       return {
         ...node,
         position: {
-          x: nodeWithPosition.x - DEFAULT_NODE_WIDTH / 2,
-          y: nodeWithPosition.y - DEFAULT_NODE_HEIGHT / 2,
+          x: nodeWithPosition.x - 325,
+          y: nodeWithPosition.y - 140,
+        },
+        style: {
+          width: "auto",
         },
       };
     });
@@ -151,13 +157,15 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
 
   const onNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
-      vscode.postMessage({
-        command: "jumpToDefinition",
-        file: node.data.file,
-        line: node.data.line,
-      });
+      if (enableJumpToFile) {
+        vscode.postMessage({
+          command: "jumpToDefinition",
+          file: node.data.file,
+          line: node.data.line,
+        });
+      }
     },
-    [vscode]
+    [vscode, enableJumpToFile]
   );
 
   const handleExport = useCallback(() => {
@@ -177,6 +185,9 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
       const message = event.data;
       switch (message.command) {
         case "renderGraph":
+          if (message.config) {
+            setEnableJumpToFile(message.config.enableJumpToFile);
+          }
           renderGraph(message.data);
           break;
         case "refresh":
@@ -200,6 +211,9 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
       const message = event.data;
       switch (message.command) {
         case "renderGraph":
+          if (message.config) {
+            setEnableJumpToFile(message.config.enableJumpToFile);
+          }
           renderGraph(message.data);
           break;
         case "refresh":
@@ -221,10 +235,8 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
   return (
     <div style={{ width: "100vw", height: "100vh" }}>
       {isLoading ? (
-        <div className="flex justify-center items-center w-screen h-screen bg-[var(--vscode-editor-background)]">
-          <div className="text-[var(--vscode-editor-foreground)] text-xl font-medium">
-            Loading GoFlow Canvas...
-          </div>
+        <div className="loading-container">
+          <div className="loading-text">Loading GoFlow Canvas...</div>
         </div>
       ) : (
         <ReactFlow
@@ -249,20 +261,30 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             zoomable
             pannable
           />
-          <Panel
-            position="top-right"
-            className="flex gap-2 bg-[var(--vscode-editor-background)] border border-[var(--vscode-panel-border)] rounded-lg p-2 shadow-lg"
-          >
+          <Panel position="top-right" className="flow-graph-panel">
+            <button
+              onClick={() => setEnableJumpToFile(!enableJumpToFile)}
+              className={`flow-graph-button ${
+                enableJumpToFile
+                  ? "flow-graph-button-toggle-on"
+                  : "flow-graph-button-toggle-off"
+              }`}
+              title={
+                enableJumpToFile ? "Jump to file: ON" : "Jump to file: OFF"
+              }
+            >
+              {enableJumpToFile ? "🔗" : "⛔"}
+            </button>
             <button
               onClick={handleFit}
-              className="bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] border-none px-3 py-2 rounded cursor-pointer text-base transition-all min-w-[36px] h-9 hover:bg-[var(--vscode-button-hoverBackground)] hover:scale-105 active:scale-95"
+              className="flow-graph-button flow-graph-button-primary"
               title="Fit view"
             >
               ⊡
             </button>
             <button
               onClick={handleExport}
-              className="bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] border-none px-3 py-2 rounded cursor-pointer text-base transition-all min-w-[36px] h-9 hover:bg-[var(--vscode-button-hoverBackground)] hover:scale-105 active:scale-95"
+              className="flow-graph-button flow-graph-button-primary"
               title="Export"
             >
               💾

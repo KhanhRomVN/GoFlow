@@ -42,7 +42,6 @@ export class FlowManager {
       const workspaceState = this.context.workspaceState;
       const savedFlows = workspaceState.get<FlowItem[]>("goflow.flows", []);
       this.flows = savedFlows;
-      Logger.info(`Loaded ${this.flows.length} flows from workspace state`);
     } catch (error) {
       Logger.error("Failed to load flows", error);
       this.flows = [];
@@ -53,7 +52,6 @@ export class FlowManager {
     try {
       await this.context.workspaceState.update("goflow.flows", this.flows);
       this.onDidChangeFlowsEmitter.fire();
-      Logger.info(`Saved ${this.flows.length} flows to workspace state`);
     } catch (error) {
       Logger.error("Failed to save flows", error);
       throw error;
@@ -76,10 +74,8 @@ export class FlowManager {
 
     if (existingIndex !== -1) {
       this.flows[existingIndex] = newFlow;
-      Logger.info(`Updated existing flow: ${newFlow.name}`);
     } else {
       this.flows.push(newFlow);
-      Logger.info(`Added new flow: ${newFlow.name}`);
     }
 
     await this.saveFlows();
@@ -91,14 +87,12 @@ export class FlowManager {
     if (index !== -1) {
       const deletedFlow = this.flows.splice(index, 1)[0];
       await this.saveFlows();
-      Logger.info(`Deleted flow: ${deletedFlow.name}`);
     }
   }
 
   public async clearAllFlows(): Promise<void> {
     this.flows = [];
     await this.saveFlows();
-    Logger.info("Cleared all flows");
   }
 
   public getFlows(): FlowItem[] {
@@ -117,7 +111,6 @@ export class FlowManager {
     if (flow) {
       Object.assign(flow, updates);
       await this.saveFlows();
-      Logger.info(`Updated flow: ${flow.name}`);
     }
   }
 }

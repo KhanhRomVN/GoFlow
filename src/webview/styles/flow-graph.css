@@ -1,0 +1,54 @@
+/* src/webview/styles/flow-graph.css */
+
+.flow-graph-container {
+  width: 100vw;
+  height: 100vh;
+}
+
+.flow-graph-panel {
+  display: flex;
+  gap: 8px;
+  background: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.flow-graph-button {
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.2s ease;
+  min-width: 36px;
+  height: 36px;
+}
+
+.flow-graph-button:hover {
+  transform: scale(1.05);
+}
+
+.flow-graph-button:active {
+  transform: scale(0.95);
+}
+
+.flow-graph-button-primary {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.flow-graph-button-primary:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.flow-graph-button-toggle-on {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.flow-graph-button-toggle-off {
+  background: #6b7280;
+  color: #d1d5db;
+}

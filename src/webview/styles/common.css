@@ -1,0 +1,38 @@
+/* src/webview/styles/common.css */
+
+:root {
+  --color-emerald-500: #10b981;
+  --color-green-500: #22c55e;
+  --color-teal-500: #14b8a6;
+  --color-blue-500: #3b82f6;
+  --color-indigo-500: #6366f1;
+  --color-purple-500: #a855f7;
+  --color-violet-600: #7c3aed;
+  --color-amber-400: #fbbf24;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  overflow: hidden;
+}
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100vw;
+  height: 100vh;
+  background: var(--vscode-editor-background);
+}
+
+.loading-text {
+  color: var(--vscode-editor-foreground);
+  font-size: 1.25rem;
+  font-weight: 500;
+}

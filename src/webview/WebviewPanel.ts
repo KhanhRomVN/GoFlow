@@ -37,9 +37,13 @@ export class WebviewPanel {
             );
             break;
           case "ready":
+            const config = vscode.workspace.getConfiguration("goflow");
             this.panel.webview.postMessage({
               command: "renderGraph",
               data: this.graphData,
+              config: {
+                enableJumpToFile: config.get("enableJumpToFile", true),
+              },
             });
             break;
           case "export":
@@ -133,8 +137,6 @@ export class WebviewPanel {
         new vscode.Range(position, position),
         vscode.TextEditorRevealType.InCenter
       );
-
-      Logger.debug(`Jumped to ${file}:${line}`);
     } catch (error) {
       Logger.error("Failed to jump to definition", error);
       vscode.window.showErrorMessage("Failed to open file");
@@ -195,15 +197,60 @@ export class WebviewPanel {
       vscode.Uri.joinPath(this.extensionUri, "media", "flow-canvas.css")
     );
 
+    const mediaUri = this.panel.webview.asWebviewUri(
+      vscode.Uri.joinPath(this.extensionUri, "media")
+    );
+
+    const vsUri = this.panel.webview.asWebviewUri(
+      vscode.Uri.joinPath(this.extensionUri, "media", "vs")
+    );
+
+    const editorWorkerUri = this.panel.webview.asWebviewUri(
+      vscode.Uri.joinPath(
+        this.extensionUri,
+        "media",
+        "vs",
+        "base",
+        "worker",
+        "workerMain.js"
+      )
+    );
+
+    const languageWorkerUri = this.panel.webview.asWebviewUri(
+      vscode.Uri.joinPath(
+        this.extensionUri,
+        "media",
+        "vs",
+        "language",
+        "go",
+        "goWorker.js"
+      )
+    );
+
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${this.panel.webview.cspSource} 'unsafe-inline' https://cdn.jsdelivr.net; font-src ${this.panel.webview.cspSource}; script-src ${this.panel.webview.cspSource} 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; img-src ${this.panel.webview.cspSource} data:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${this.panel.webview.cspSource} 'unsafe-inline'; font-src ${this.panel.webview.cspSource} data:; script-src ${this.panel.webview.cspSource} 'unsafe-inline' 'unsafe-eval'; img-src ${this.panel.webview.cspSource} data: blob:; worker-src ${this.panel.webview.cspSource} blob:;">
   <title>GoFlow Canvas</title>
-  <script src="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.1/lib/index.min.js"></script>
   <link href="${stylesUri}" rel="stylesheet">
+  <script>
+    var require = {
+      paths: {
+        'vs': '${vsUri}'
+      }
+    };
+    window.MonacoEnvironment = {
+      getWorkerUrl: function (moduleId, label) {
+        return '${editorWorkerUri}';
+      },
+      baseUrl: '${vsUri}'
+    };
+  </script>
+  <script src="${vsUri}/loader.js"></script>
+  <script src="${vsUri}/editor/editor.main.nls.js"></script>
+  <script src="${vsUri}/editor/editor.main.js"></script>
 </head>
 <body>
   <div id="root"></div>

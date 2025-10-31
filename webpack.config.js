@@ -1,4 +1,5 @@
 const path = require('path');
+const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
 
 const extensionConfig = {
   target: 'node',
@@ -41,10 +42,16 @@ const webviewConfig = {
   entry: './src/webview/index.tsx',
   output: {
     path: path.resolve(__dirname, 'media'),
-    filename: 'webview.js'
+    filename: 'webview.js',
+    globalObject: 'self',
+    publicPath: ''
   },
   resolve: {
-    extensions: ['.tsx', '.ts', '.js']
+    extensions: ['.tsx', '.ts', '.js'],
+    fallback: {
+      'path': false,
+      'fs': false
+    }
   },
   module: {
     rules: [
@@ -56,10 +63,25 @@ const webviewConfig = {
       {
         test: /\.css$/,
         use: ['style-loader', 'css-loader']
+      },
+      {
+        test: /\.ttf$/,
+        type: 'asset/resource',
+        generator: {
+          filename: 'fonts/[name][ext]'
+        }
       }
     ]
   },
-  devtool: 'nosources-source-map'
+  plugins: [
+    // Không cần MonacoWebpackPlugin nữa vì dùng pre-built version
+  ],
+  devtool: 'nosources-source-map',
+  performance: {
+    hints: false,
+    maxEntrypointSize: 512000,
+    maxAssetSize: 512000
+  }
 };
 
 module.exports = [extensionConfig, webviewConfig];

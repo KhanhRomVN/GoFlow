@@ -50,18 +50,12 @@ export class GoParser {
         const isValid =
           validNodeIds.has(edge.source) && validNodeIds.has(edge.target);
         if (!isValid) {
-          Logger.debug(
+          Logger.error(
             `Removed invalid edge: ${edge.source} -> ${edge.target} (target not in current file)`
           );
         }
         return isValid;
       });
-
-      Logger.info(
-        `Parsed ${nodes.length} nodes and ${validEdges.length} edges (${
-          edges.length - validEdges.length
-        } external calls filtered)`
-      );
 
       return {
         nodes,
@@ -78,8 +72,6 @@ export class GoParser {
     document: vscode.TextDocument
   ): Promise<GraphData> {
     try {
-      Logger.info(`Analyzing file with dependencies: ${document.fileName}`);
-
       // Step 1: Parse file hiện tại để lấy nodes và tìm external calls
       const currentFileData = await this.parseFile(document);
       const allNodes = new Map<string, Node>();
@@ -102,11 +94,6 @@ export class GoParser {
 
       // Step 2: Tìm tất cả external calls từ file hiện tại
       const externalFiles = await this.findDirectDependencies(document);
-      Logger.info(
-        `Found ${externalFiles.size} direct dependencies: ${Array.from(
-          externalFiles
-        ).join(", ")}`
-      );
 
       // Step 3: Parse các external files để lấy function definitions
       for (const filePath of externalFiles) {
@@ -120,9 +107,6 @@ export class GoParser {
               const node = this.createNodeFromSymbol(symbol, extDoc);
               if (!allNodes.has(node.id)) {
                 allNodes.set(node.id, node);
-                Logger.debug(
-                  `Added external node: ${node.id} from ${filePath}`
-                );
               }
             }
           }
@@ -155,23 +139,10 @@ export class GoParser {
                 type: "calls",
               });
               edgeMap.get(node.id)!.add(callee.target);
-              Logger.debug(
-                `Added ${callee.crossFile ? "cross-file" : "same-file"} edge: ${
-                  node.id
-                } -> ${callee.target}`
-              );
             }
           }
         }
       }
-
-      Logger.info(
-        `Analysis complete: ${allNodes.size} nodes (${
-          currentFileData.nodes.length
-        } from current file, ${
-          allNodes.size - currentFileData.nodes.length
-        } from dependencies), ${allEdges.length} edges`
-      );
 
       return {
         nodes: Array.from(allNodes.values()),
@@ -189,10 +160,6 @@ export class GoParser {
     functionInfo: { name: string; symbol: vscode.DocumentSymbol }
   ): Promise<GraphData> {
     try {
-      Logger.info(
-        `Analyzing function ${functionInfo.name} with all dependencies`
-      );
-
       const allNodes = new Map<string, Node>();
       const allEdges: Edge[] = [];
       const edgeMap = new Map<string, Set<string>>();
@@ -207,8 +174,6 @@ export class GoParser {
       allNodes.set(rootNode.id, rootNode);
       functionQueue.push({ symbol: functionInfo.symbol, document });
       visitedFiles.add(document.uri.fsPath);
-
-      Logger.info(`Root function: ${rootNode.id} (${rootNode.label})`);
 
       // Step 2: BFS để traverse tất cả dependencies
       while (functionQueue.length > 0) {
@@ -234,11 +199,6 @@ export class GoParser {
               type: "calls",
             });
             edgeMap.get(currentNode.id)!.add(callee.targetId);
-            Logger.debug(
-              `Added edge: ${currentNode.id} -> ${callee.targetId} (${
-                callee.crossFile ? "cross-file" : "same-file"
-              })`
-            );
           }
 
           // Thêm target node nếu chưa có
@@ -254,19 +214,9 @@ export class GoParser {
               symbol: callee.targetSymbol,
               document: callee.targetDocument,
             });
-
-            Logger.debug(
-              `Added node: ${targetNode.id} from ${
-                callee.crossFile ? callee.targetDocument.fileName : "same file"
-              }`
-            );
           }
         }
       }
-
-      Logger.info(
-        `Analysis complete: ${allNodes.size} nodes (including ${visitedFiles.size} files), ${allEdges.length} edges from function ${functionInfo.name}`
-      );
 
       return {
         nodes: Array.from(allNodes.values()),
@@ -363,13 +313,13 @@ export class GoParser {
                 }
               }
             } catch (error) {
-              Logger.debug(
+              Logger.error(
                 `Could not open or analyze target file: ${def.uri.fsPath}`
               );
             }
           }
         } catch (error) {
-          Logger.debug(`Could not resolve definition for: ${functionName}`);
+          Logger.error(`Could not resolve definition for: ${functionName}`);
         }
       }
     }
@@ -417,7 +367,6 @@ export class GoParser {
                   filePath.endsWith(".go")
                 ) {
                   dependencies.add(filePath);
-                  Logger.debug(`Found dependency: ${filePath}`);
                 }
               }
             } catch (error) {
@@ -484,7 +433,7 @@ export class GoParser {
             }
           }
         } catch (error) {
-          Logger.debug(`Could not resolve definition for: ${functionName}`);
+          Logger.error(`Could not resolve definition for: ${functionName}`);
         }
       }
     }
@@ -608,19 +557,16 @@ export class GoParser {
                   const targetId = `${targetType}_${targetSymbol.name}`;
 
                   callees.push({ target: targetId });
-                  Logger.debug(
-                    `Found call: ${symbol.name} -> ${targetSymbol.name} (via LSP)`
-                  );
                 }
               }
             } else {
-              Logger.debug(
+              Logger.error(
                 `External call detected: ${functionName} (in ${def.uri.fsPath})`
               );
             }
           }
         } catch (error) {
-          Logger.debug(`Could not resolve definition for: ${functionName}`);
+          Logger.error(`Could not resolve definition for: ${functionName}`);
         }
       }
     }
@@ -657,8 +603,6 @@ export class GoParser {
     const nodeMap = new Map<string, Node>();
     const edgeMap = new Map<string, Set<string>>();
 
-    Logger.info(`Starting multi-file analysis for ${documents.length} files`);
-
     // Step 1: Parse tất cả files để lấy nodes
     for (const doc of documents) {
       try {
@@ -670,7 +614,6 @@ export class GoParser {
             if (!nodeMap.has(node.id)) {
               nodeMap.set(node.id, node);
               allNodes.push(node);
-              Logger.debug(`Added node: ${node.id} from ${doc.fileName}`);
             }
           }
         }
@@ -705,11 +648,6 @@ export class GoParser {
                   type: "calls",
                 });
                 edgeMap.get(node.id)!.add(callee.target);
-                Logger.debug(
-                  `Added edge: ${node.id} -> ${callee.target} (${
-                    callee.crossFile ? "cross-file" : "same-file"
-                  })`
-                );
               }
             }
           }
@@ -718,10 +656,6 @@ export class GoParser {
         Logger.error(`Failed to analyze calls in file: ${doc.fileName}`, error);
       }
     }
-
-    Logger.info(
-      `Multi-file analysis complete: ${allNodes.length} nodes, ${allEdges.length} edges`
-    );
 
     return {
       nodes: allNodes,
@@ -782,26 +716,17 @@ export class GoParser {
                   // Chỉ thêm edge nếu target node tồn tại trong nodeMap
                   if (nodeMap.has(targetId)) {
                     callees.push({ target: targetId, crossFile: isCrossFile });
-                    Logger.debug(
-                      `Found ${
-                        isCrossFile ? "cross-file" : "same-file"
-                      } call: ${symbol.name} -> ${targetSymbol.name}`
-                    );
-                  } else {
-                    Logger.debug(
-                      `Skipped call to ${targetSymbol.name}: not in analyzed files`
-                    );
                   }
                 }
               }
             } catch (error) {
-              Logger.debug(
+              Logger.error(
                 `Could not open or analyze target file: ${def.uri.fsPath}`
               );
             }
           }
         } catch (error) {
-          Logger.debug(`Could not resolve definition for: ${functionName}`);
+          Logger.error(`Could not resolve definition for: ${functionName}`);
         }
       }
     }
