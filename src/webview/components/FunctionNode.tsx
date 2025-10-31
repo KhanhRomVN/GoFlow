@@ -1,10 +1,25 @@
 import React, { memo, useState } from "react";
 import { Handle, Position, NodeProps } from "@xyflow/react";
-import {
-  FunctionNodeData,
-  NODE_COLORS,
-  PREVIEW_LINES,
-} from "../../models/FlowNode";
+
+// Constants
+const NODE_COLORS = {
+  function: "#4CAF50",
+  method: "#2196F3",
+} as const;
+
+const PREVIEW_LINES = 8;
+
+// Type definition
+interface FunctionNodeData extends Record<string, unknown> {
+  id: string;
+  label: string;
+  type: "function" | "method";
+  file: string;
+  line: number;
+  code: string;
+  isExpanded: boolean;
+  previewLines: number;
+}
 
 const FunctionNode: React.FC<NodeProps> = ({ data }) => {
   const [isExpanded, setIsExpanded] = useState(false);

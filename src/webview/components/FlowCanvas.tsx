@@ -9,20 +9,37 @@ import {
   Node,
   Edge,
   Panel,
-  NodeTypes,
 } from "@xyflow/react";
 import dagre from "dagre";
 import "@xyflow/react/dist/style.css";
 
 import FunctionNode from "./FunctionNode";
 import { GraphData } from "../../models/Node";
-import {
-  FlowNode,
-  FlowEdge,
-  DEFAULT_NODE_WIDTH,
-  DEFAULT_NODE_HEIGHT,
-  PREVIEW_LINES,
-} from "../../models/FlowNode";
+
+// Constants - có thể move ra file riêng nếu cần
+const NODE_COLORS = {
+  function: "#4CAF50",
+  method: "#2196F3",
+} as const;
+
+const DEFAULT_NODE_WIDTH = 320;
+const DEFAULT_NODE_HEIGHT = 180;
+const PREVIEW_LINES = 8;
+
+// Type definitions
+interface FunctionNodeData extends Record<string, unknown> {
+  id: string;
+  label: string;
+  type: "function" | "method";
+  file: string;
+  line: number;
+  code: string;
+  isExpanded: boolean;
+  previewLines: number;
+}
+
+type FlowNode = Node<FunctionNodeData>;
+type FlowEdge = Edge;
 
 interface FlowCanvasProps {
   vscode: any;
