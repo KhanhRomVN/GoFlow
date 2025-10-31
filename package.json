@@ -97,6 +97,12 @@
         "title": "Clear All Flows",
         "category": "GoFlow",
         "icon": "$(clear-all)"
+      },
+      {
+        "command": "goflow.toggleFullscreen",
+        "title": "Toggle Fullscreen Mode",
+        "category": "GoFlow",
+        "icon": "$(screen-full)"
       }
     ],
     "menus": {
@@ -143,6 +149,12 @@
         "key": "ctrl+shift+g",
         "mac": "cmd+shift+g",
         "when": "resourceLangId == go"
+      },
+      {
+        "command": "goflow.toggleFullscreen",
+        "key": "f11",
+        "mac": "f11",
+        "when": "goflowCanvasVisible"
       }
     ],
     "configuration": {

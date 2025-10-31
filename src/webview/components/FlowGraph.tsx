@@ -62,7 +62,15 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
   ): { nodes: FlowNode[]; edges: FlowEdge[] } => {
     const dagreGraph = new dagre.graphlib.Graph();
     dagreGraph.setDefaultEdgeLabel(() => ({}));
-    dagreGraph.setGraph({ rankdir: "TB", ranksep: 100, nodesep: 80 });
+
+    dagreGraph.setGraph({
+      rankdir: "LR",
+      ranksep: 150,
+      nodesep: 100,
+      edgesep: 50,
+      marginx: 50,
+      marginy: 50,
+    });
 
     nodes.forEach((node) => {
       dagreGraph.setNode(node.id, {
@@ -163,6 +171,29 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
       command: "fitView",
     });
   }, [vscode]);
+
+  useEffect(() => {
+    const messageHandler = (event: MessageEvent) => {
+      const message = event.data;
+      switch (message.command) {
+        case "renderGraph":
+          renderGraph(message.data);
+          break;
+        case "refresh":
+          if (message.data) {
+            renderGraph(message.data);
+          }
+          break;
+      }
+    };
+
+    window.addEventListener("message", messageHandler);
+    vscode.postMessage({ command: "ready" });
+
+    return () => {
+      window.removeEventListener("message", messageHandler);
+    };
+  }, [renderGraph, vscode]);
 
   useEffect(() => {
     const messageHandler = (event: MessageEvent) => {

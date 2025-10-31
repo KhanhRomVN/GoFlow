@@ -2,8 +2,14 @@ import React, { memo, useState, useMemo } from "react";
 import { Handle, Position, NodeProps } from "@xyflow/react";
 
 const NODE_COLORS = {
-  function: "bg-gradient-to-r from-green-600 to-emerald-600",
-  method: "bg-gradient-to-r from-blue-600 to-cyan-600",
+  function: {
+    header: "bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500",
+    accent: "#10b981",
+  },
+  method: {
+    header: "bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500",
+    accent: "#6366f1",
+  },
 } as const;
 
 interface FunctionNodeData extends Record<string, unknown> {
@@ -89,7 +95,7 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
     return headerHeight + relativePosition * bodyHeight;
   };
 
-  const nodeColor = NODE_COLORS[nodeData.type];
+  const nodeColors = NODE_COLORS[nodeData.type];
 
   const previewCode = useMemo(() => {
     if (!nodeData.code) return "";
@@ -100,6 +106,31 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
   const totalLines = nodeData.code.split("\n").length;
   const displayCode = isExpanded ? nodeData.code : previewCode;
 
+  const highlightGoSyntax = (code: string): string => {
+    const keywords =
+      /\b(package|import|func|return|if|else|for|range|var|const|type|struct|interface|go|defer|select|case|switch|break|continue|fallthrough|goto|map|chan)\b/g;
+    const strings = /(["'`])(?:(?=(\\?))\2.)*?\1/g;
+    const comments = /(\/\/.*$|\/\*[\s\S]*?\*\/)/gm;
+    const numbers = /\b(\d+\.?\d*)\b/g;
+    const functions = /\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
+
+    return code
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(
+        comments,
+        '<span style="color: var(--vscode-editor-foreground); opacity: 0.6;">$1</span>'
+      )
+      .replace(strings, '<span style="color: #ce9178;">$1</span>')
+      .replace(
+        keywords,
+        '<span style="color: #c586c0; font-weight: 600;">$1</span>'
+      )
+      .replace(numbers, '<span style="color: #b5cea8;">$1</span>')
+      .replace(functions, '<span style="color: #dcdcaa;">$1</span>(');
+  };
+
   return (
     <div className="bg-[var(--vscode-editor-background)] border-2 border-[var(--vscode-panel-border)] rounded-lg w-80 shadow-lg overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5">
       <Handle
@@ -107,7 +138,7 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
         position={Position.Top}
         id="top"
         style={{
-          background: "#6366f1",
+          background: nodeColors.accent,
           width: 12,
           height: 12,
           border: "2px solid white",
@@ -115,7 +146,7 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
       />
 
       <div
-        className={`flex items-center gap-2 px-4 py-3 text-white border-b-2 border-black/20 cursor-pointer select-none min-h-[56px] ${nodeColor} hover:brightness-110`}
+        className={`flex items-center gap-2 px-4 py-3 text-white border-b-2 border-black/20 cursor-pointer select-none min-h-[56px] ${nodeColors.header} hover:brightness-110 shadow-md`}
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 bg-black/25 rounded flex-shrink-0">
@@ -140,8 +171,11 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
           isExpanded ? "max-h-[600px] overflow-y-auto" : "max-h-60"
         }`}
       >
-        <pre className="m-0 p-3 font-mono text-xs leading-relaxed text-[var(--vscode-editor-foreground)] bg-[var(--vscode-editor-background)] overflow-x-auto">
-          <code className="language-go whitespace-pre">{displayCode}</code>
+        <pre className="m-0 p-3 font-mono text-xs leading-relaxed bg-[var(--vscode-editor-background)] overflow-x-auto">
+          <code
+            className="language-go whitespace-pre"
+            dangerouslySetInnerHTML={{ __html: highlightGoSyntax(displayCode) }}
+          />
         </pre>
         {!isExpanded && totalLines > 10 && (
           <div className="text-center py-2 bg-[var(--vscode-editor-background)] border-t border-[var(--vscode-panel-border)] text-[11px] text-[var(--vscode-descriptionForeground)] italic">
