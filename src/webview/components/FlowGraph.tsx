@@ -122,6 +122,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           line: node.line,
           endLine: node.endLine,
           code: node.code || "",
+          vscode: vscode,
         },
       }));
 
