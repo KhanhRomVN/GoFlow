@@ -1,6 +1,6 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import Canvas from "./components/Canvas";
+import FlowCanvas from "./components/FlowCanvas";
 
 declare global {
   interface Window {
@@ -13,7 +13,7 @@ const vscode = window.acquireVsCodeApi();
 const container = document.getElementById("root");
 if (container) {
   const root = createRoot(container);
-  root.render(<Canvas vscode={vscode} />);
+  root.render(<FlowCanvas vscode={vscode} />);
 } else {
   console.error("Root element not found");
 }

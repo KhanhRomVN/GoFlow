@@ -7,6 +7,7 @@ export interface Node {
   file: string;
   line: number;
   kind: vscode.SymbolKind;
+  code?: string;
 }
 
 export interface Edge {

@@ -192,7 +192,7 @@ export class CanvasPanel {
       vscode.Uri.joinPath(this.extensionUri, "media", "webview.js")
     );
     const stylesUri = this.panel.webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, "media", "styles.css")
+      vscode.Uri.joinPath(this.extensionUri, "media", "flow-canvas.css")
     );
 
     return `<!DOCTYPE html>
@@ -200,7 +200,7 @@ export class CanvasPanel {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${this.panel.webview.cspSource} 'unsafe-inline'; script-src ${this.panel.webview.cspSource} 'unsafe-inline'; img-src ${this.panel.webview.cspSource} data:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${this.panel.webview.cspSource} 'unsafe-inline'; font-src ${this.panel.webview.cspSource}; script-src ${this.panel.webview.cspSource} 'unsafe-inline' 'unsafe-eval'; img-src ${this.panel.webview.cspSource} data:;">
   <title>GoFlow Canvas</title>
   <link href="${stylesUri}" rel="stylesheet">
 </head>

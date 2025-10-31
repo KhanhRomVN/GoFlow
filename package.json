@@ -127,6 +127,7 @@
     "test": "node ./out/test/runTest.js"
   },
   "dependencies": {
+    "@xyflow/react": "^12.9.2",
     "cytoscape": "^3.26.0",
     "cytoscape-dagre": "^2.5.0",
     "dagre": "^0.8.5",
@@ -135,13 +136,16 @@
     "vscode-languageclient": "^9.0.0"
   },
   "devDependencies": {
+    "@types/dagre": "^0.7.53",
     "@types/node": "20.x",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@types/vscode": "^1.75.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
+    "css-loader": "^7.1.2",
     "eslint": "^8.40.0",
+    "style-loader": "^4.0.0",
     "ts-loader": "^9.4.0",
     "typescript": "^5.0.0",
     "webpack": "^5.80.0",

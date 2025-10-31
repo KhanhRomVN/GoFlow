@@ -1,0 +1,231 @@
+/* Loading */
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100vw;
+  height: 100vh;
+  background-color: var(--vscode-editor-background);
+}
+
+.loading-text {
+  color: var(--vscode-editor-foreground);
+  font-size: 20px;
+  font-weight: 500;
+}
+
+/* Function Node */
+.function-node {
+  background: var(--vscode-editor-background);
+  border: 2px solid var(--vscode-panel-border);
+  border-radius: 8px;
+  width: 320px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.function-node:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+  transform: translateY(-2px);
+}
+
+/* Node Header */
+.function-node-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  border-bottom: 2px solid rgba(0, 0, 0, 0.2);
+}
+
+.function-node-icon {
+  font-size: 18px;
+  font-weight: bold;
+  min-width: 24px;
+  text-align: center;
+}
+
+.function-node-title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.function-node-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 10px;
+  opacity: 0.9;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.function-node-meta .file-indicator {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+  display: block;
+}
+
+.function-node-meta .line-indicator {
+  font-size: 9px;
+  opacity: 0.8;
+}
+
+/* Node Body */
+.function-node-body {
+  max-height: 180px;
+  overflow-y: auto;
+  background: var(--vscode-editor-background);
+  transition: max-height 0.3s ease;
+}
+
+.function-node-body.expanded {
+  max-height: 400px;
+}
+
+.function-node-code {
+  margin: 0;
+  padding: 12px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--vscode-editor-foreground);
+  background: var(--vscode-editor-background);
+  overflow-x: auto;
+}
+
+.function-node-code code {
+  white-space: pre;
+  word-wrap: normal;
+}
+
+/* Node Footer */
+.function-node-footer {
+  border-top: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-editor-background);
+  padding: 6px 12px;
+  display: flex;
+  justify-content: center;
+}
+
+.function-node-toggle {
+  background: transparent;
+  border: 1px solid var(--vscode-button-border);
+  color: var(--vscode-button-foreground);
+  padding: 4px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  transition: all 0.2s;
+  width: 100%;
+}
+
+.function-node-toggle:hover {
+  background: var(--vscode-button-hoverBackground);
+  border-color: var(--vscode-button-hoverBackground);
+}
+
+.function-node-toggle:active {
+  transform: scale(0.98);
+}
+
+/* Scrollbar */
+.function-node-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.function-node-body::-webkit-scrollbar-track {
+  background: var(--vscode-scrollbarSlider-background);
+}
+
+.function-node-body::-webkit-scrollbar-thumb {
+  background: var(--vscode-scrollbarSlider-hoverBackground);
+  border-radius: 3px;
+}
+
+.function-node-body::-webkit-scrollbar-thumb:hover {
+  background: var(--vscode-scrollbarSlider-activeBackground);
+}
+
+/* Control Panel */
+.control-panel {
+  display: flex;
+  gap: 8px;
+  background: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.control-btn {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.2s;
+  min-width: 36px;
+  height: 36px;
+}
+
+.control-btn:hover {
+  background: var(--vscode-button-hoverBackground);
+  transform: scale(1.05);
+}
+
+.control-btn:active {
+  transform: scale(0.95);
+}
+
+/* React Flow Overrides */
+.react-flow__node {
+  cursor: pointer;
+}
+
+.react-flow__node.selected .function-node {
+  border-color: #FFC107;
+  box-shadow: 0 0 0 2px #FFC107;
+}
+
+.react-flow__edge-path {
+  stroke: #666;
+  stroke-width: 2;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: #FFC107;
+  stroke-width: 3;
+}
+
+.react-flow__minimap {
+  background: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-panel-border);
+}
+
+.react-flow__controls {
+  background: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-panel-border);
+}
+
+.react-flow__controls-button {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.react-flow__controls-button:hover {
+  background: var(--vscode-button-hoverBackground);
+}
