@@ -33,6 +33,23 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "goflow",
+          "title": "GoFlow",
+          "icon": "$(graph)"
+        }
+      ]
+    },
+    "views": {
+      "goflow": [
+        {
+          "id": "goflowExplorer",
+          "name": "Flows"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "goflow.showCanvas",
@@ -56,6 +73,30 @@
         "command": "goflow.focusFunction",
         "title": "Focus on Function",
         "category": "GoFlow"
+      },
+      {
+        "command": "goflow.createFlow",
+        "title": "Create New Flow",
+        "category": "GoFlow",
+        "icon": "$(add)"
+      },
+      {
+        "command": "goflow.openFlow",
+        "title": "Open Flow",
+        "category": "GoFlow",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "goflow.deleteFlow",
+        "title": "Delete Flow",
+        "category": "GoFlow",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "goflow.clearAllFlows",
+        "title": "Clear All Flows",
+        "category": "GoFlow",
+        "icon": "$(clear-all)"
       }
     ],
     "menus": {
@@ -70,6 +111,29 @@
         {
           "command": "goflow.showCanvas",
           "when": "resourceLangId == go"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "goflow.createFlow",
+          "when": "view == goflowExplorer",
+          "group": "navigation"
+        },
+        {
+          "command": "goflow.clearAllFlows",
+          "when": "view == goflowExplorer"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "goflow.openFlow",
+          "when": "view == goflowExplorer && viewItem == flowItem",
+          "group": "inline"
+        },
+        {
+          "command": "goflow.deleteFlow",
+          "when": "view == goflowExplorer && viewItem == flowItem",
+          "group": "inline"
         }
       ]
     },
