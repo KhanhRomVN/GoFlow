@@ -33,12 +33,15 @@ interface CodeEntityNodeData extends Record<string, unknown> {
   vscode?: any;
   onHighlightEdge?: (sourceNodeId: string, targetNodeId: string) => void;
   onClearHighlight?: () => void;
+  onNodeHighlight?: (nodeId: string) => void;
+  onClearNodeHighlight?: () => void;
   allNodes?: any[];
 }
 
 const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
+  const [isNodeHighlighted, setIsNodeHighlighted] = useState(false);
   const nodeData = data as CodeEntityNodeData;
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -123,6 +126,45 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
     [nodeData]
   );
 
+  const handleNodeClick = useCallback(
+    (e: React.MouseEvent) => {
+      // Chỉ trigger khi click vào container, không phải Monaco editor
+      if ((e.target as HTMLElement).closest(".monaco-editor")) {
+        return;
+      }
+
+      if (
+        typeof nodeData.onNodeHighlight === "function" &&
+        typeof nodeData.onClearNodeHighlight === "function"
+      ) {
+        if (isNodeHighlighted) {
+          nodeData.onClearNodeHighlight();
+          setIsNodeHighlighted(false);
+          Logger.info(
+            `[CodeEntityNode] Cleared parent highlight for node: ${nodeData.id}`
+          );
+        } else {
+          nodeData.onNodeHighlight(nodeData.id);
+          setIsNodeHighlighted(true);
+          Logger.info(
+            `[CodeEntityNode] Showing parent nodes for: ${nodeData.id}`
+          );
+        }
+      }
+    },
+    [nodeData, isNodeHighlighted]
+  );
+
+  // Clear node highlight khi component unmount hoặc deselected
+  useEffect(() => {
+    if (!selected && isNodeHighlighted) {
+      if (typeof nodeData.onClearNodeHighlight === "function") {
+        nodeData.onClearNodeHighlight();
+      }
+      setIsNodeHighlighted(false);
+    }
+  }, [selected, isNodeHighlighted, nodeData]);
+
   return (
     <>
       {/* NodeResizer - Hiển thị khi node được select */}
@@ -149,8 +191,11 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
       />
 
       <div
-        className={`code-entity-node-container ${isResizing ? "resizing" : ""}`}
+        className={`code-entity-node-container ${
+          isResizing ? "resizing" : ""
+        } ${isNodeHighlighted ? "node-highlighted" : ""}`}
         data-type="codeEntityNode"
+        onClick={handleNodeClick}
       >
         {/* Center Handles Only */}
         <Handle
@@ -209,6 +254,11 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
             {nodeData.type === "function" ? "Function" : "Method"}
           </span>
           <span className="code-entity-node-label">{nodeData.label}</span>
+          {isNodeHighlighted && (
+            <span className="code-entity-node-parent-indicator">
+              ⬆️ Parents
+            </span>
+          )}
           {isSaving && (
             <span className="code-entity-node-saving-indicator">
               💾 Saving...

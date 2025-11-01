@@ -44,6 +44,8 @@ interface CodeEntityNodeData extends Record<string, unknown> {
   vscode?: any;
   onHighlightEdge?: (sourceNodeId: string, targetNodeId: string) => void;
   onClearHighlight?: () => void;
+  onNodeHighlight?: (nodeId: string) => void;
+  onClearNodeHighlight?: () => void;
   allNodes?: any[];
 }
 
@@ -69,18 +71,24 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     useState<FrameworkConfig | null>(null);
   const [currentFileName, setCurrentFileName] = useState<string>("");
   const [isAutoSorting, setIsAutoSorting] = useState(false);
-  const [highlightedEdges, setHighlightedEdges] = useState<Set<string>>(
+  const [lineHighlightedEdges, setLineHighlightedEdges] = useState<Set<string>>(
+    new Set()
+  );
+  const [nodeHighlightedEdges, setNodeHighlightedEdges] = useState<Set<string>>(
     new Set()
   );
 
   const handleHighlightEdge = useCallback(
     (sourceNodeId: string, targetNodeId: string) => {
+      const edgeKey = `${sourceNodeId}->${targetNodeId}`;
+      setLineHighlightedEdges(new Set([edgeKey]));
+
       setEdges((currentEdges) => {
         return currentEdges.map((edge) => {
-          const isTargetEdge =
-            edge.source === sourceNodeId && edge.target === targetNodeId;
+          const currentEdgeKey = `${edge.source}->${edge.target}`;
+          const isLineHighlighted = currentEdgeKey === edgeKey;
 
-          if (isTargetEdge) {
+          if (isLineHighlighted) {
             return {
               ...edge,
               animated: true,
@@ -89,41 +97,172 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
                 stroke: "#FFC107",
                 strokeWidth: 4,
               },
-            };
-          } else {
-            return {
-              ...edge,
-              animated: false,
-              style: {
-                ...edge.style,
-                stroke: "#666",
-                strokeWidth: 2,
-              },
+              zIndex: 1000,
             };
           }
+
+          const isNodeHighlighted = nodeHighlightedEdges.has(currentEdgeKey);
+          if (isNodeHighlighted) {
+            return {
+              ...edge,
+              animated: true,
+              style: {
+                ...edge.style,
+                stroke: "#FF6B6B",
+                strokeWidth: 3,
+              },
+              zIndex: 999,
+            };
+          }
+
+          return {
+            ...edge,
+            animated: false,
+            style: {
+              ...edge.style,
+              stroke: "#666",
+              strokeWidth: 2,
+            },
+            zIndex: 1,
+          };
         });
       });
-
-      setHighlightedEdges(new Set([`${sourceNodeId}->${targetNodeId}`]));
     },
-    [setEdges]
+    [setEdges, nodeHighlightedEdges]
   );
 
   const handleClearHighlight = useCallback(() => {
-    setEdges((currentEdges) => {
-      return currentEdges.map((edge) => ({
-        ...edge,
-        animated: false,
-        style: {
-          ...edge.style,
-          stroke: "#666",
-          strokeWidth: 2,
-        },
-      }));
-    });
+    setLineHighlightedEdges(new Set());
 
-    setHighlightedEdges(new Set());
-  }, [setEdges]);
+    setEdges((currentEdges) => {
+      return currentEdges.map((edge) => {
+        const currentEdgeKey = `${edge.source}->${edge.target}`;
+        const isNodeHighlighted = nodeHighlightedEdges.has(currentEdgeKey);
+
+        if (isNodeHighlighted) {
+          return {
+            ...edge,
+            animated: true,
+            style: {
+              ...edge.style,
+              stroke: "#FF6B6B",
+              strokeWidth: 3,
+            },
+            zIndex: 999,
+          };
+        }
+
+        return {
+          ...edge,
+          animated: false,
+          style: {
+            ...edge.style,
+            stroke: "#666",
+            strokeWidth: 2,
+          },
+          zIndex: 1,
+        };
+      });
+    });
+  }, [setEdges, nodeHighlightedEdges]);
+
+  const handleNodeHighlight = useCallback(
+    (targetNodeId: string) => {
+      const incomingEdges = edges.filter(
+        (edge) => edge.target === targetNodeId
+      );
+      const edgeKeys = new Set(
+        incomingEdges.map((edge) => `${edge.source}->${edge.target}`)
+      );
+
+      setNodeHighlightedEdges(edgeKeys);
+
+      setEdges((currentEdges) => {
+        return currentEdges.map((edge) => {
+          const currentEdgeKey = `${edge.source}->${edge.target}`;
+          const isLineHighlighted = lineHighlightedEdges.has(currentEdgeKey);
+
+          if (isLineHighlighted) {
+            return {
+              ...edge,
+              animated: true,
+              style: {
+                ...edge.style,
+                stroke: "#FFC107",
+                strokeWidth: 4,
+              },
+              zIndex: 1000,
+            };
+          }
+
+          const isNodeHighlighted = edgeKeys.has(currentEdgeKey);
+          if (isNodeHighlighted) {
+            return {
+              ...edge,
+              animated: true,
+              style: {
+                ...edge.style,
+                stroke: "#FF6B6B",
+                strokeWidth: 3,
+              },
+              zIndex: 999,
+            };
+          }
+
+          return {
+            ...edge,
+            animated: false,
+            style: {
+              ...edge.style,
+              stroke: "#666",
+              strokeWidth: 2,
+            },
+            zIndex: 1,
+          };
+        });
+      });
+
+      Logger.info(
+        `[FlowGraph] Node highlight: ${incomingEdges.length} parent edges found for node ${targetNodeId}`
+      );
+    },
+    [edges, setEdges, lineHighlightedEdges]
+  );
+
+  const handleClearNodeHighlight = useCallback(() => {
+    setNodeHighlightedEdges(new Set());
+
+    setEdges((currentEdges) => {
+      return currentEdges.map((edge) => {
+        const currentEdgeKey = `${edge.source}->${edge.target}`;
+        const isLineHighlighted = lineHighlightedEdges.has(currentEdgeKey);
+
+        if (isLineHighlighted) {
+          return {
+            ...edge,
+            animated: true,
+            style: {
+              ...edge.style,
+              stroke: "#FFC107",
+              strokeWidth: 4,
+            },
+            zIndex: 1000,
+          };
+        }
+
+        return {
+          ...edge,
+          animated: false,
+          style: {
+            ...edge.style,
+            stroke: "#666",
+            strokeWidth: 2,
+          },
+          zIndex: 1,
+        };
+      });
+    });
+  }, [setEdges, lineHighlightedEdges]);
 
   const calculateFileGroupContainers = useCallback(
     (nodes: FlowNode[]): FlowNode[] => {
@@ -245,6 +384,8 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               vscode: vscode,
               onHighlightEdge: handleHighlightEdge,
               onClearHighlight: handleClearHighlight,
+              onNodeHighlight: handleNodeHighlight,
+              onClearNodeHighlight: handleClearNodeHighlight,
               allNodes: data.nodes,
             } as CodeEntityNodeData,
             style: {
