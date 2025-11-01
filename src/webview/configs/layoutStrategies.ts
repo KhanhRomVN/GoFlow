@@ -1,7 +1,7 @@
 export interface LayoutStrategy {
   algorithm: "dagre" | "elk-layered" | "elk-force" | "d3-force" | "elk-box";
   direction: "TB" | "LR" | "BT" | "RL" | "DOWN" | "RIGHT" | "UP" | "LEFT";
-  edgeType: "default" | "smoothstep" | "straight" | "step";
+  edgeType: "default";
   ranksep?: number;
   nodesep?: number;
   description: string;
@@ -22,7 +22,7 @@ export const FRAMEWORK_LAYOUT_STRATEGIES: Record<string, FrameworkConfig> = {
     strategy: {
       algorithm: "dagre",
       direction: "TB",
-      edgeType: "smoothstep",
+      edgeType: "default",
       ranksep: 120,
       nodesep: 80,
       description:
@@ -38,7 +38,7 @@ export const FRAMEWORK_LAYOUT_STRATEGIES: Record<string, FrameworkConfig> = {
     strategy: {
       algorithm: "dagre",
       direction: "LR",
-      edgeType: "smoothstep",
+      edgeType: "default",
       ranksep: 150,
       nodesep: 100,
       description: "Left-Right (gRPC Service Chain)",
@@ -52,7 +52,7 @@ export const FRAMEWORK_LAYOUT_STRATEGIES: Record<string, FrameworkConfig> = {
     strategy: {
       algorithm: "dagre",
       direction: "TB",
-      edgeType: "smoothstep",
+      edgeType: "default",
       ranksep: 120,
       nodesep: 80,
       description: "Top-Down Standard",
@@ -72,7 +72,7 @@ export const FRAMEWORK_LAYOUT_STRATEGIES: Record<string, FrameworkConfig> = {
     strategy: {
       algorithm: "elk-layered",
       direction: "DOWN",
-      edgeType: "default", // Bezier curves
+      edgeType: "default",
       description: "ELK Layered (handles @Autowired circular deps)",
     },
     rationale:
@@ -110,7 +110,7 @@ export const FRAMEWORK_LAYOUT_STRATEGIES: Record<string, FrameworkConfig> = {
     strategy: {
       algorithm: "dagre",
       direction: "TB",
-      edgeType: "smoothstep",
+      edgeType: "default",
       ranksep: 100,
       nodesep: 70,
       description: "Top-Down (View → Serializer → Model → DB)",
@@ -124,7 +124,7 @@ export const FRAMEWORK_LAYOUT_STRATEGIES: Record<string, FrameworkConfig> = {
     strategy: {
       algorithm: "dagre",
       direction: "TB",
-      edgeType: "smoothstep",
+      edgeType: "default",
       ranksep: 110,
       nodesep: 75,
       description: "Top-Down (Router → Service → Repository)",
@@ -138,7 +138,7 @@ export const FRAMEWORK_LAYOUT_STRATEGIES: Record<string, FrameworkConfig> = {
     strategy: {
       algorithm: "d3-force",
       direction: "TB",
-      edgeType: "straight",
+      edgeType: "default",
       description: "Force-Directed (async task chains)",
     },
     rationale: "Celery tasks có nhiều parallel execution paths",
@@ -150,7 +150,7 @@ export const FRAMEWORK_LAYOUT_STRATEGIES: Record<string, FrameworkConfig> = {
     strategy: {
       algorithm: "dagre",
       direction: "TB",
-      edgeType: "smoothstep",
+      edgeType: "default",
       ranksep: 100,
       nodesep: 70,
       description: "Top-Down Standard",
@@ -165,7 +165,7 @@ export const FRAMEWORK_LAYOUT_STRATEGIES: Record<string, FrameworkConfig> = {
     strategy: {
       algorithm: "d3-force",
       direction: "TB",
-      edgeType: "straight",
+      edgeType: "default",
       description: "Force-Directed (middleware chains)",
     },
     rationale: "Express middleware chains có nhiều branching logic",
@@ -189,7 +189,7 @@ export const FRAMEWORK_LAYOUT_STRATEGIES: Record<string, FrameworkConfig> = {
     strategy: {
       algorithm: "d3-force",
       direction: "TB",
-      edgeType: "straight",
+      edgeType: "default",
       description: "Force-Directed Standard",
     },
     rationale: "Node.js async/callback patterns phù hợp force-directed",
@@ -214,7 +214,7 @@ export const FRAMEWORK_LAYOUT_STRATEGIES: Record<string, FrameworkConfig> = {
     strategy: {
       algorithm: "dagre",
       direction: "TB",
-      edgeType: "smoothstep",
+      edgeType: "default",
       ranksep: 100,
       nodesep: 70,
       description: "Top-Down Simple",
@@ -241,7 +241,7 @@ export const FRAMEWORK_LAYOUT_STRATEGIES: Record<string, FrameworkConfig> = {
     strategy: {
       algorithm: "dagre",
       direction: "LR",
-      edgeType: "smoothstep",
+      edgeType: "default",
       ranksep: 140,
       nodesep: 90,
       description: "Left-Right (actor model)",
@@ -267,7 +267,7 @@ export const FRAMEWORK_LAYOUT_STRATEGIES: Record<string, FrameworkConfig> = {
     strategy: {
       algorithm: "dagre",
       direction: "LR",
-      edgeType: "smoothstep",
+      edgeType: "default",
       ranksep: 130,
       nodesep: 85,
       description: "Left-Right Standard",
@@ -312,7 +312,7 @@ export const FRAMEWORK_LAYOUT_STRATEGIES: Record<string, FrameworkConfig> = {
     strategy: {
       algorithm: "dagre",
       direction: "TB",
-      edgeType: "smoothstep",
+      edgeType: "default",
       ranksep: 110,
       nodesep: 75,
       description: "Top-Down (Route → Controller → Model)",
@@ -326,7 +326,7 @@ export const FRAMEWORK_LAYOUT_STRATEGIES: Record<string, FrameworkConfig> = {
     strategy: {
       algorithm: "dagre",
       direction: "TB",
-      edgeType: "smoothstep",
+      edgeType: "default",
       ranksep: 100,
       nodesep: 70,
       description: "Top-Down Standard",
@@ -341,7 +341,7 @@ export const FRAMEWORK_LAYOUT_STRATEGIES: Record<string, FrameworkConfig> = {
     strategy: {
       algorithm: "dagre",
       direction: "TB",
-      edgeType: "smoothstep",
+      edgeType: "default",
       ranksep: 120,
       nodesep: 80,
       description: "Top-Down (Ktor routing)",
@@ -367,7 +367,7 @@ export const FRAMEWORK_LAYOUT_STRATEGIES: Record<string, FrameworkConfig> = {
     strategy: {
       algorithm: "dagre",
       direction: "TB",
-      edgeType: "smoothstep",
+      edgeType: "default",
       ranksep: 120,
       nodesep: 80,
       description: "Top-Down Standard",

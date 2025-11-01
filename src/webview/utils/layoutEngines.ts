@@ -567,6 +567,8 @@ export async function applyLayout(
     style: {
       stroke: "#666",
       strokeWidth: 2,
+      strokeLinecap: "round" as const,
+      strokeLinejoin: "round" as const,
     },
   }));
 
