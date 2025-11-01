@@ -52,3 +52,66 @@
   background: #6b7280;
   color: #d1d5db;
 }
+
+.flow-graph-button-toggle-off {
+  background: #6b7280;
+  color: #d1d5db;
+}
+
+.flow-graph-button-auto-sort {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-weight: 600;
+  position: relative;
+  overflow: hidden;
+}
+
+.flow-graph-button-auto-sort:hover:not(:disabled) {
+  background: linear-gradient(135deg, #5568d3 0%, #663a8f 100%);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.flow-graph-button-auto-sort:disabled {
+  background: #9ca3af;
+  color: #d1d5db;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Framework Info Panel */
+.flow-graph-info-panel {
+  background: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  max-width: 400px;
+}
+
+.flow-graph-info-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.flow-graph-info-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--vscode-descriptionForeground);
+  letter-spacing: 0.05em;
+}
+
+.flow-graph-info-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vscode-editor-foreground);
+}
+
+.flow-graph-info-hint {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  font-style: italic;
+  margin-top: 4px;
+  line-height: 1.4;
+}

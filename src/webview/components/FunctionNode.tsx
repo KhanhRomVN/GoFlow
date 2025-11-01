@@ -147,7 +147,19 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
   );
 
   return (
-    <div className="function-node-container">
+    <div
+      className="function-node-container"
+      onMouseDown={(e) => {
+        // Chỉ cho phép kéo khi click vào header
+        const target = e.target as HTMLElement;
+        const isHeader = target.closest(".function-node-header");
+
+        if (!isHeader) {
+          // Prevent drag nếu click vào body hoặc footer
+          e.stopPropagation();
+        }
+      }}
+    >
       {/* Center Handles Only */}
       <Handle
         type="target"

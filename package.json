@@ -212,13 +212,16 @@
     "@xyflow/react": "^12.9.2",
     "cytoscape": "^3.26.0",
     "cytoscape-dagre": "^2.5.0",
+    "d3-force": "^3.0.0",
     "dagre": "^0.8.5",
+    "elkjs": "^0.11.0",
     "monaco-editor": "^0.54.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "vscode-languageclient": "^9.0.0"
   },
   "devDependencies": {
+    "@types/d3-force": "^3.0.10",
     "@types/dagre": "^0.7.53",
     "@types/node": "20.x",
     "@types/react": "^18.2.0",
