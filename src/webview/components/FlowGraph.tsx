@@ -14,6 +14,7 @@ import "@xyflow/react/dist/style.css";
 import "../styles/common.css";
 import "../styles/flow-graph.css";
 import CodeEntityNode from "./CodeEntityNode";
+import FileGroupContainer from "./FileGroupContainer";
 import { GraphData } from "../../models/Node";
 import { Logger } from "../../utils/webviewLogger";
 import {
@@ -55,6 +56,7 @@ interface FlowGraphProps {
 
 const nodeTypes = {
   codeEntityNode: CodeEntityNode as React.ComponentType<any>,
+  fileGroupContainer: FileGroupContainer as React.ComponentType<any>,
 };
 
 Logger.info(
@@ -138,6 +140,77 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     setHighlightedEdges(new Set());
   }, [setEdges]);
 
+  const calculateFileGroupContainers = useCallback(
+    (nodes: FlowNode[]): FlowNode[] => {
+      const containerNodes: FlowNode[] = [];
+      const nodesByFile = new Map<string, FlowNode[]>();
+
+      // Group nodes by file
+      nodes.forEach((node) => {
+        if (node.type === "codeEntityNode") {
+          const file = (node.data as CodeEntityNodeData).file;
+          if (!nodesByFile.has(file)) {
+            nodesByFile.set(file, []);
+          }
+          nodesByFile.get(file)!.push(node);
+        }
+      });
+
+      // Create container for each file group
+      nodesByFile.forEach((fileNodes, file) => {
+        if (fileNodes.length === 0) return;
+
+        // Calculate bounding box
+        const padding = 40;
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+
+        fileNodes.forEach((node) => {
+          const nodeWidth = node.style?.width || 650;
+          const nodeHeight = node.style?.height || 320;
+          const x = node.position.x;
+          const y = node.position.y;
+
+          minX = Math.min(minX, x);
+          minY = Math.min(minY, y);
+          maxX = Math.max(maxX, x + (nodeWidth as number));
+          maxY = Math.max(maxY, y + (nodeHeight as number));
+        });
+
+        // Create container node
+        const containerWidth = maxX - minX + padding * 2;
+        const containerHeight = maxY - minY + padding * 2;
+
+        containerNodes.push({
+          id: `container-${file}`,
+          type: "fileGroupContainer" as const,
+          position: {
+            x: minX - padding,
+            y: minY - padding,
+          },
+          data: {
+            fileName: file,
+            nodeCount: fileNodes.length,
+            width: containerWidth,
+            height: containerHeight,
+          } as any,
+          draggable: false,
+          selectable: false,
+          zIndex: 0,
+          style: {
+            width: containerWidth,
+            height: containerHeight,
+          },
+        } as FlowNode);
+      });
+
+      return containerNodes;
+    },
+    []
+  );
+
   const getLayoutedElements = useCallback(
     async (
       nodes: FlowNode[],
@@ -165,9 +238,14 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
 
       const layoutedResult = await applyLayout(nodes, edges, strategy);
 
-      return layoutedResult as { nodes: FlowNode[]; edges: FlowEdge[] };
+      // Calculate and add file group containers
+      const layoutedFlowNodes = layoutedResult.nodes as FlowNode[];
+      const containerNodes = calculateFileGroupContainers(layoutedFlowNodes);
+      const allNodes = [...containerNodes, ...layoutedFlowNodes];
+
+      return { nodes: allNodes, edges: layoutedResult.edges };
     },
-    []
+    [calculateFileGroupContainers]
   );
 
   const convertToFlowData = useCallback(
@@ -197,6 +275,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               width: 650,
               height: 320,
             },
+            zIndex: 10,
           } as FlowNode);
         }
       });
@@ -304,8 +383,9 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     });
 
     try {
+      const codeNodes = nodes.filter((n) => n.type === "codeEntityNode");
       const { nodes: layoutedNodes, edges: layoutedEdges } =
-        await getLayoutedElements(nodes, edges, detectedFramework);
+        await getLayoutedElements(codeNodes, edges, detectedFramework);
 
       setNodes(layoutedNodes);
       setEdges(layoutedEdges);
@@ -338,6 +418,27 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
       command: "fitView",
     });
   }, [vscode]);
+
+  // Auto-update containers when nodes move
+  useEffect(() => {
+    const codeNodes = nodes.filter((n) => n.type === "codeEntityNode");
+    if (codeNodes.length === 0) return;
+
+    const containerNodes = calculateFileGroupContainers(codeNodes);
+
+    setNodes((currentNodes) => {
+      const withoutContainers = currentNodes.filter(
+        (n) => n.type !== "fileGroupContainer"
+      );
+      return [...containerNodes, ...withoutContainers];
+    });
+  }, [
+    nodes
+      .filter((n) => n.type === "codeEntityNode")
+      .map((n) => `${n.id}-${n.position.x}-${n.position.y}`)
+      .join(","),
+    calculateFileGroupContainers,
+  ]);
 
   useEffect(() => {
     Logger.info("[FlowGraph] Setting up message handler");
@@ -435,6 +536,9 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           <Controls />
           <MiniMap
             nodeColor={(node) => {
+              if (node.type === "fileGroupContainer") {
+                return "rgba(251, 191, 36, 0.3)";
+              }
               const data = node.data as any;
               return data.type === "function" ? "#4CAF50" : "#2196F3";
             }}
