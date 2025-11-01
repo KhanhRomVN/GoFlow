@@ -33,21 +33,7 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
 }) => {
   const [isEditorReady, setIsEditorReady] = useState(false);
 
-  Logger.info("[MonacoCodeEditor] Props:", {
-    language,
-    height,
-    readOnly,
-    lineNumber,
-    valueLength: value?.length || 0,
-  });
-
   useEffect(() => {
-    Logger.info("[MonacoCodeEditor] Initializing Monaco loader");
-    Logger.info(
-      "[MonacoCodeEditor] Window.MonacoEnvironment:",
-      window.MonacoEnvironment
-    );
-
     // Configure Monaco to load from local media/vs folder
     try {
       loader.config({
@@ -74,8 +60,6 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   }, []);
 
   const handleEditorDidMount = (editor: any, monaco: any) => {
-    Logger.info("[MonacoCodeEditor] Editor mounted");
-    Logger.info("[MonacoCodeEditor] ReadOnly mode:", readOnly);
     setIsEditorReady(true);
 
     // Listen to cursor position changes
@@ -97,7 +81,6 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
     try {
       // Try to get theme from window object first
       const themeInfo = (window as any).__goflowTheme;
-      Logger.info("[MonacoCodeEditor] Theme from window:", themeInfo);
 
       if (themeInfo && typeof themeInfo.isDark === "boolean") {
         themeName = themeInfo.isDark ? "vs-dark" : "vs";
@@ -106,7 +89,6 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
         const bgColor = getComputedStyle(document.body)
           .getPropertyValue("--vscode-editor-background")
           .trim();
-        Logger.info("[MonacoCodeEditor] Detected background color:", bgColor);
 
         // If background is light-colored, use light theme
         if (bgColor && bgColor.startsWith("#")) {
@@ -121,7 +103,6 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       Logger.error("[MonacoCodeEditor] Error detecting theme:", err);
     }
 
-    Logger.info("[MonacoCodeEditor] Applying theme:", themeName);
     monaco.editor.setTheme(themeName);
 
     // Set line number offset if needed
@@ -131,10 +112,6 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   };
 
   const handleChange = (value: string | undefined) => {
-    Logger.info(
-      "[MonacoCodeEditor] Content changed, new length:",
-      value?.length || 0
-    );
     if (value !== undefined) {
       onChange(value);
     }

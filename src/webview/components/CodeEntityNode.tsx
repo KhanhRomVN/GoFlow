@@ -56,23 +56,10 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
 
   const nodeColors = NODE_COLORS[nodeData.type];
 
-  const totalLines = nodeData.code.split("\n").length;
   const displayCode = nodeData.code;
-
-  // Monaco Editor: Dynamic height based on node size
-  const MONACO_LINE_HEIGHT = 19;
-  const EDITOR_PADDING = 24;
-  const HEADER_HEIGHT = 56;
-  const FOOTER_HEIGHT = 48;
-  const MIN_LINES = 5;
-
-  // Calculate editor height dynamically (fill available space)
-  const editorHeight = "100%";
 
   const handleCodeChange = useCallback(
     (value: string) => {
-      Logger.info("[CodeEntityNode] Code changed, length:", value.length);
-
       // Clear previous timeout
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
@@ -80,12 +67,6 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
 
       // Debounce auto-save after 1.5 seconds
       saveTimeoutRef.current = setTimeout(async () => {
-        Logger.info("[CodeEntityNode] Auto-saving code...");
-        Logger.info(`[CodeEntityNode] File: ${nodeData.file}`);
-        Logger.info(
-          `[CodeEntityNode] Lines: ${nodeData.line}-${nodeData.endLine}`
-        );
-
         if (!nodeData.vscode) {
           console.error("[CodeEntityNode] VSCode API not available");
           return;
@@ -103,12 +84,9 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
             nodeId: nodeData.id,
           });
 
-          Logger.info("[CodeEntityNode] Auto-save message sent to backend");
-
           // Reset saving indicator after 1 second
           setTimeout(() => {
             setIsSaving(false);
-            Logger.info("[CodeEntityNode] Auto-save completed");
           }, 1000);
         } catch (error) {
           console.error("[CodeEntityNode] Failed to auto-save:", error);
@@ -130,11 +108,6 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
 
   const handleLineClick = useCallback(
     (lineNumber: number, lineContent: string) => {
-      Logger.info("[CodeEntityNode] Line clicked:", {
-        lineNumber,
-        lineContent,
-      });
-
       // Gửi request lên backend để VSCode API resolve definition
       if (nodeData.vscode && nodeData.onHighlightEdge) {
         nodeData.vscode.postMessage({

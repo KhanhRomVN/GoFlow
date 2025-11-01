@@ -59,13 +59,7 @@ const nodeTypes = {
   fileGroupContainer: FileGroupContainer as React.ComponentType<any>,
 };
 
-Logger.info(
-  "[GoFlow Debug] FlowGraph - NodeTypes registered:",
-  Object.keys(nodeTypes)
-);
-
 const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
-  Logger.info("[FlowGraph] Component mounting...");
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<FlowEdge>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -79,15 +73,8 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     new Set()
   );
 
-  Logger.info("[FlowGraph] Initial state - isLoading:", isLoading);
-
   const handleHighlightEdge = useCallback(
     (sourceNodeId: string, targetNodeId: string) => {
-      Logger.info("[FlowGraph] Highlight edge request:", {
-        sourceNodeId,
-        targetNodeId,
-      });
-
       setEdges((currentEdges) => {
         return currentEdges.map((edge) => {
           const isTargetEdge =
@@ -123,8 +110,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
   );
 
   const handleClearHighlight = useCallback(() => {
-    Logger.info("[FlowGraph] Clear all edge highlights");
-
     setEdges((currentEdges) => {
       return currentEdges.map((edge) => ({
         ...edge,
@@ -226,16 +211,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         description: "Default Layout",
       };
 
-      Logger.info("[FlowGraph] Applying layout:", {
-        algorithm: strategy.algorithm,
-        direction: strategy.direction,
-        framework: framework
-          ? Object.keys(FRAMEWORK_LAYOUT_STRATEGIES).find(
-              (key) => FRAMEWORK_LAYOUT_STRATEGIES[key] === framework
-            )
-          : "default",
-      });
-
       const layoutedResult = await applyLayout(nodes, edges, strategy);
 
       // Calculate and add file group containers
@@ -311,12 +286,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
   const renderGraph = useCallback(
     async (data: GraphData, fileName?: string) => {
       try {
-        Logger.info("[FlowGraph] renderGraph called with data:", {
-          nodes: data.nodes.length,
-          edges: data.edges.length,
-          fileName,
-        });
-
         // Auto-detect framework
         if (fileName) {
           setCurrentFileName(fileName);
@@ -324,27 +293,16 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           const fileContent = firstNode?.code || "";
           const detected = detectFramework(fileName, fileContent);
           setDetectedFramework(detected);
-          Logger.info("[FlowGraph] Detected framework:", {
-            strategy: detected.strategy.description,
-            rationale: detected.rationale,
-          });
         }
 
         const { nodes: flowNodes, edges: flowEdges } = convertToFlowData(data);
-        Logger.info("[FlowGraph] Converted to flow data:", {
-          flowNodes: flowNodes.length,
-          flowEdges: flowEdges.length,
-        });
-
         const { nodes: layoutedNodes, edges: layoutedEdges } =
           await getLayoutedElements(flowNodes, flowEdges, detectedFramework);
-        Logger.info("[FlowGraph] Layout completed");
 
         setNodes(layoutedNodes);
         setEdges(layoutedEdges);
         setIsLoading(false);
         setError(null);
-        Logger.info("[FlowGraph] Graph rendered successfully");
       } catch (err) {
         console.error("[FlowGraph] Failed to render graph:", err);
         setError(err instanceof Error ? err.message : "Unknown error");
@@ -378,9 +336,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     if (!detectedFramework || isAutoSorting) return;
 
     setIsAutoSorting(true);
-    Logger.info("[FlowGraph] Auto-sorting with detected framework:", {
-      strategy: detectedFramework.strategy.description,
-    });
 
     try {
       const codeNodes = nodes.filter((n) => n.type === "codeEntityNode");
@@ -389,8 +344,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
 
       setNodes(layoutedNodes);
       setEdges(layoutedEdges);
-
-      Logger.info("[FlowGraph] Auto-sort completed");
     } catch (err) {
       console.error("[FlowGraph] Auto-sort failed:", err);
       setError(err instanceof Error ? err.message : "Auto-sort failed");
@@ -424,57 +377,79 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     const codeNodes = nodes.filter((n) => n.type === "codeEntityNode");
     if (codeNodes.length === 0) return;
 
-    const containerNodes = calculateFileGroupContainers(codeNodes);
+    // Chỉ update khi không có container hoặc số lượng code nodes thay đổi
+    const currentContainers = nodes.filter(
+      (n) => n.type === "fileGroupContainer"
+    );
+    if (currentContainers.length > 0 && codeNodes.length > 0) {
+      // Đã có containers, chỉ cần update khi position thay đổi
+      const containerNodes = calculateFileGroupContainers(codeNodes);
 
-    setNodes((currentNodes) => {
-      const withoutContainers = currentNodes.filter(
-        (n) => n.type !== "fileGroupContainer"
-      );
-      return [...containerNodes, ...withoutContainers];
-    });
-  }, [
-    nodes
-      .filter((n) => n.type === "codeEntityNode")
-      .map((n) => `${n.id}-${n.position.x}-${n.position.y}`)
-      .join(","),
-    calculateFileGroupContainers,
-  ]);
+      // So sánh với containers hiện tại
+      const needsUpdate = containerNodes.some((newContainer) => {
+        const oldContainer = currentContainers.find(
+          (c) => c.id === newContainer.id
+        );
+        if (!oldContainer) return true;
+
+        return (
+          Math.abs(oldContainer.position.x - newContainer.position.x) > 1 ||
+          Math.abs(oldContainer.position.y - newContainer.position.y) > 1 ||
+          Math.abs(
+            ((oldContainer.style?.width as number) || 0) -
+              ((newContainer.style?.width as number) || 0)
+          ) > 1 ||
+          Math.abs(
+            ((oldContainer.style?.height as number) || 0) -
+              ((newContainer.style?.height as number) || 0)
+          ) > 1
+        );
+      });
+
+      if (!needsUpdate) return;
+
+      setNodes((currentNodes) => {
+        const withoutContainers = currentNodes.filter(
+          (n) => n.type !== "fileGroupContainer"
+        );
+        return [...containerNodes, ...withoutContainers];
+      });
+    } else if (currentContainers.length === 0 && codeNodes.length > 0) {
+      // Chưa có containers, tạo mới
+      const containerNodes = calculateFileGroupContainers(codeNodes);
+      setNodes((currentNodes) => {
+        const withoutContainers = currentNodes.filter(
+          (n) => n.type !== "fileGroupContainer"
+        );
+        return [...containerNodes, ...withoutContainers];
+      });
+    }
+  }, [nodes, calculateFileGroupContainers, setNodes]);
 
   useEffect(() => {
-    Logger.info("[FlowGraph] Setting up message handler");
-
     const messageHandler = async (event: MessageEvent) => {
-      Logger.info("[FlowGraph] Message received:", event.data?.command);
       const message = event.data;
 
       try {
         switch (message.command) {
           case "renderGraph":
-            Logger.info("[FlowGraph] renderGraph command received");
             if (message.config) {
               setEnableJumpToFile(message.config.enableJumpToFile);
             }
             if (message.theme) {
               (window as any).__goflowTheme = message.theme;
-              Logger.info("[FlowGraph] Theme received:", message.theme);
             }
             await renderGraph(message.data, message.data?.fileName);
             break;
           case "refresh":
-            Logger.info("[FlowGraph] refresh command received");
             if (message.data) {
               await renderGraph(message.data, message.data?.fileName);
             }
             break;
           case "highlightEdge":
-            Logger.info("[FlowGraph] highlightEdge command received", {
-              sourceNodeId: message.sourceNodeId,
-              targetNodeId: message.targetNodeId,
-            });
             handleHighlightEdge(message.sourceNodeId, message.targetNodeId);
             break;
           case "clearHighlight":
-            Logger.info("[FlowGraph] clearHighlight command received");
             handleClearHighlight();
             break;
           default:
@@ -488,11 +463,9 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     };
 
     window.addEventListener("message", messageHandler);
-    Logger.info("[FlowGraph] Sending ready message to backend");
     vscode.postMessage({ command: "ready" });
 
     return () => {
-      Logger.info("[FlowGraph] Cleaning up message handler");
       window.removeEventListener("message", messageHandler);
     };
   }, [renderGraph, vscode, handleHighlightEdge, handleClearHighlight]);

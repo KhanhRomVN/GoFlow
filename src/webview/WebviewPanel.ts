@@ -33,9 +33,6 @@ export class WebviewPanel {
 
         switch (message.command) {
           case "jumpToDefinition":
-            Logger.info(
-              `[WebviewPanel] Jump to definition: ${message.file}:${message.line}`
-            );
             await this.jumpToDefinition(message.file, message.line);
             break;
           case "getCodePreview":
@@ -49,9 +46,6 @@ export class WebviewPanel {
             );
             break;
           case "saveCode":
-            Logger.info(
-              `[WebviewPanel] Save code request: ${message.file}:${message.startLine}-${message.endLine}`
-            );
             Logger.debug(
               `[WebviewPanel] New code length: ${message.code?.length || 0}`
             );
@@ -64,9 +58,6 @@ export class WebviewPanel {
             );
             break;
           case "resolveDefinitionAtLine":
-            Logger.info(
-              `[WebviewPanel] Resolve definition at: ${message.file}:${message.line}+${message.relativeLine}`
-            );
             await this.handleResolveDefinition(
               message.file,
               message.line,
@@ -76,7 +67,6 @@ export class WebviewPanel {
             );
             break;
           case "ready":
-            Logger.info("[WebviewPanel] Webview ready, sending graph data");
             const config = vscode.workspace.getConfiguration("goflow");
 
             // Get VSCode theme colors
@@ -182,7 +172,6 @@ export class WebviewPanel {
   }
 
   private async jumpToDefinition(file: string, line: number) {
-    Logger.info(`[WebviewPanel] Jumping to ${file}:${line}`);
     try {
       const uri = vscode.Uri.file(file);
       const document = await vscode.workspace.openTextDocument(uri);
@@ -199,8 +188,6 @@ export class WebviewPanel {
         new vscode.Range(position, position),
         vscode.TextEditorRevealType.InCenter
       );
-
-      Logger.info(`[WebviewPanel] Successfully jumped to ${file}:${line}`);
     } catch (error) {
       Logger.error("[WebviewPanel] Failed to jump to definition", error);
       vscode.window.showErrorMessage("Failed to open file");
@@ -214,9 +201,6 @@ export class WebviewPanel {
     newCode: string,
     nodeId: string
   ) {
-    Logger.info(
-      `[WebviewPanel] Saving code to ${file}:${startLine}-${endLine}`
-    );
     Logger.debug(`[WebviewPanel] New code:\n${newCode}`);
 
     try {
@@ -260,11 +244,8 @@ export class WebviewPanel {
       const success = await vscode.workspace.applyEdit(edit);
 
       if (success) {
-        Logger.info(`[WebviewPanel] Code saved successfully to ${file}`);
-
         // Save the document
         await document.save();
-        Logger.info(`[WebviewPanel] Document saved to disk`);
 
         vscode.window.showInformationMessage(
           `Code updated successfully in ${file}`
@@ -315,17 +296,9 @@ export class WebviewPanel {
     sourceNodeId: string
   ) {
     try {
-      Logger.info(
-        `[WebviewPanel] Resolving definition for line: ${lineContent}`
-      );
-
       const uri = vscode.Uri.file(file);
-      const document = await vscode.workspace.openTextDocument(uri);
 
-      // Calculate absolute line in document
-      // startLine là line bắt đầu của function (1-based)
-      // relativeLine là line number trong Monaco editor (1-based)
-      const absoluteLine = startLine + relativeLine - 2; // -2 vì startLine và relativeLine đều 1-based
+      const absoluteLine = startLine + relativeLine - 2;
 
       Logger.debug(`[WebviewPanel] Absolute line in document: ${absoluteLine}`);
 
@@ -356,10 +329,6 @@ export class WebviewPanel {
         }
       }
 
-      Logger.info(
-        `[WebviewPanel] Found ${functionCalls.length} function calls in line`
-      );
-
       // Thử resolve definition cho từng function call
       for (const call of functionCalls) {
         const position = new vscode.Position(absoluteLine, call.index);
@@ -378,11 +347,6 @@ export class WebviewPanel {
           if (definitions && definitions.length > 0) {
             const def = definitions[0];
             const defFilePath = def.uri.fsPath;
-
-            Logger.info(`[WebviewPanel] Definition found:`, {
-              file: defFilePath,
-              line: def.range.start.line + 1,
-            });
 
             // Bỏ qua stdlib và vendor
             if (
@@ -415,11 +379,6 @@ export class WebviewPanel {
               if (targetSymbol && this.isFunctionOrMethod(targetSymbol)) {
                 const targetType = this.getNodeType(targetSymbol.kind);
                 const targetId = `${targetType}_${targetSymbol.name}`;
-
-                Logger.info(`[WebviewPanel] Target node found:`, {
-                  targetId,
-                  targetLabel: targetSymbol.name,
-                });
 
                 // Gửi message về webview để highlight edge
                 this.panel.webview.postMessage({

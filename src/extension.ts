@@ -7,8 +7,6 @@ import { FlowTreeDataProvider } from "./views/FlowTreeDataProvider";
 
 export function activate(context: vscode.ExtensionContext) {
   Logger.initialize(LogLevel.DEBUG);
-  Logger.info("[Extension] GoFlow extension activated");
-  Logger.debug("[Extension] Extension context initialized");
 
   const flowManager = FlowManager.initialize(context);
   Logger.debug("[Extension] FlowManager initialized");
@@ -37,10 +35,6 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      Logger.info(
-        `[Extension] Show canvas command triggered for file: ${editor.document.fileName}`
-      );
-
       try {
         await vscode.window.withProgress(
           {
@@ -54,9 +48,6 @@ export function activate(context: vscode.ExtensionContext) {
             // Step 1: Lấy danh sách functions từ file hiện tại
             Logger.debug("[Extension] Step 1: Getting functions from document");
             const functions = await getFunctionsFromDocument(editor.document);
-            Logger.info(
-              `[Extension] Found ${functions.length} functions in document`
-            );
 
             if (functions.length === 0) {
               Logger.warn("[Extension] No functions found in current file");
@@ -88,10 +79,6 @@ export function activate(context: vscode.ExtensionContext) {
               Logger.debug("[Extension] User cancelled function selection");
               return;
             }
-
-            Logger.info(
-              `[Extension] Selected function: ${selectedFunction.value.name}`
-            );
 
             progress.report({
               increment: 40,
