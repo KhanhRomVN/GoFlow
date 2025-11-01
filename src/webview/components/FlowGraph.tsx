@@ -13,8 +13,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import "../styles/common.css";
 import "../styles/flow-graph.css";
-
-import FunctionNode from "./FunctionNode";
+import CodeEntityNode from "./CodeEntityNode";
 import { GraphData } from "../../models/Node";
 import { Logger } from "../../utils/webviewLogger";
 import {
@@ -33,7 +32,7 @@ const DEFAULT_NODE_WIDTH = 320;
 const DEFAULT_NODE_HEIGHT = 180;
 const PREVIEW_LINES = 8;
 
-interface FunctionNodeData extends Record<string, unknown> {
+interface CodeEntityNodeData extends Record<string, unknown> {
   id: string;
   label: string;
   type: "function" | "method";
@@ -41,9 +40,13 @@ interface FunctionNodeData extends Record<string, unknown> {
   line: number;
   endLine?: number;
   code: string;
+  vscode?: any;
+  onHighlightEdge?: (sourceNodeId: string, targetNodeId: string) => void;
+  onClearHighlight?: () => void;
+  allNodes?: any[];
 }
 
-type FlowNode = Node<FunctionNodeData>;
+type FlowNode = Node<CodeEntityNodeData>;
 type FlowEdge = Edge;
 
 interface FlowGraphProps {
@@ -51,15 +54,8 @@ interface FlowGraphProps {
 }
 
 const nodeTypes = {
-  functionNode: FunctionNode as React.ComponentType<any>,
+  codeEntityNode: CodeEntityNode as React.ComponentType<any>,
 };
-
-// Thêm state cho detected framework
-interface FlowGraphState {
-  detectedFramework: FrameworkConfig | null;
-  currentFileName: string;
-  isAutoSorting: boolean;
-}
 
 Logger.info(
   "[GoFlow Debug] FlowGraph - NodeTypes registered:",
@@ -151,9 +147,9 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
       const strategy = framework?.strategy || {
         algorithm: "dagre" as const,
         direction: "TB" as const,
-        edgeType: "smoothstep" as const,
-        ranksep: 120,
-        nodesep: 80,
+        edgeType: "default" as const,
+        ranksep: 150,
+        nodesep: 100,
         description: "Default Layout",
       };
 
@@ -167,41 +163,43 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           : "default",
       });
 
-      const layouted = await applyLayout(nodes, edges, strategy);
+      const layoutedResult = await applyLayout(nodes, edges, strategy);
 
-      const layoutedNodes = layouted.nodes.map((node) => ({
-        ...node,
-        data: node.data as FunctionNodeData,
-        style: { width: "auto" },
-      })) as FlowNode[];
-
-      return { nodes: layoutedNodes, edges: layouted.edges };
+      return layoutedResult as { nodes: FlowNode[]; edges: FlowEdge[] };
     },
     []
-  ); // Empty deps vì không dùng external variables
+  );
 
   const convertToFlowData = useCallback(
     (data: GraphData): { nodes: FlowNode[]; edges: FlowEdge[] } => {
-      const flowNodes: FlowNode[] = data.nodes
-        .filter((node) => node.type === "function" || node.type === "method")
-        .map((node) => ({
-          id: node.id,
-          type: "functionNode" as const,
-          position: { x: 0, y: 0 },
-          data: {
+      const flowNodes: FlowNode[] = [];
+
+      data.nodes.forEach((node) => {
+        if (node.type === "function" || node.type === "method") {
+          flowNodes.push({
             id: node.id,
-            label: node.label,
-            type: node.type as "function" | "method",
-            file: node.file,
-            line: node.line,
-            endLine: node.endLine,
-            code: node.code || "",
-            vscode: vscode,
-            onHighlightEdge: handleHighlightEdge,
-            onClearHighlight: handleClearHighlight,
-            allNodes: data.nodes,
-          },
-        }));
+            type: "codeEntityNode" as const,
+            position: { x: 0, y: 0 },
+            data: {
+              id: node.id,
+              label: node.label,
+              type: node.type as "function" | "method",
+              file: node.file,
+              line: node.line,
+              endLine: node.endLine,
+              code: node.code || "",
+              vscode: vscode,
+              onHighlightEdge: handleHighlightEdge,
+              onClearHighlight: handleClearHighlight,
+              allNodes: data.nodes,
+            } as CodeEntityNodeData,
+            style: {
+              width: 650,
+              height: 320,
+            },
+          } as FlowNode);
+        }
+      });
 
       const flowEdges: FlowEdge[] = data.edges
         .filter((edge) => {
@@ -213,15 +211,23 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           id: `edge-${edge.source}-${edge.target}-${index}`,
           source: edge.source,
           target: edge.target,
-          type: "smoothstep",
+          type: "default",
           animated: false,
-          style: { stroke: "#666", strokeWidth: 2 },
+          style: {
+            stroke: "#666",
+            strokeWidth: 2,
+            strokeLinecap: "round",
+          },
+          pathOptions: {
+            borderRadius: 20,
+            curvature: 0.5,
+          },
         }));
 
       return { nodes: flowNodes, edges: flowEdges };
     },
     [vscode, handleHighlightEdge, handleClearHighlight]
-  ); // Dependencies từ data
+  );
 
   const renderGraph = useCallback(
     async (data: GraphData, fileName?: string) => {
@@ -277,11 +283,12 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
 
   const onNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
-      if (enableJumpToFile) {
+      if (enableJumpToFile && node.type === "codeEntityNode") {
+        const data = node.data as CodeEntityNodeData;
         vscode.postMessage({
           command: "jumpToDefinition",
-          file: node.data.file,
-          line: node.data.line,
+          file: data.file,
+          line: data.line,
         });
       }
     },
@@ -347,7 +354,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               setEnableJumpToFile(message.config.enableJumpToFile);
             }
             if (message.theme) {
-              // Store theme in window instead of vscode object
               (window as any).__goflowTheme = message.theme;
               Logger.info("[FlowGraph] Theme received:", message.theme);
             }
@@ -421,6 +427,9 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           fitView
           minZoom={0.1}
           maxZoom={2}
+          nodesDraggable={true}
+          nodesConnectable={false}
+          elementsSelectable={true}
         >
           <Background />
           <Controls />
@@ -475,7 +484,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             </button>
           </Panel>
 
-          {/* Framework Info Panel */}
           {detectedFramework && (
             <Panel position="bottom-left" className="flow-graph-info-panel">
               <div className="flow-graph-info-content">

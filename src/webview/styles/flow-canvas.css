@@ -75,3 +75,58 @@
 .react-flow__node {
   cursor: pointer;
 }
+
+/* ===================================
+   NODE RESIZER STYLES
+   =================================== */
+
+/* Override React Flow NodeResizer styles */
+.react-flow__resize-control {
+  z-index: 10;
+}
+
+.react-flow__resize-control.handle {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: white;
+  border: 2px solid;
+  transition: all 0.2s ease;
+}
+
+.react-flow__resize-control.handle:hover {
+  transform: scale(1.3);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2);
+}
+
+.react-flow__resize-control.line {
+  border-width: 2px;
+  border-style: solid;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.react-flow__node.selected .react-flow__resize-control.line {
+  opacity: 1;
+}
+
+/* Resize handles positions */
+.react-flow__resize-control.top,
+.react-flow__resize-control.bottom {
+  cursor: ns-resize;
+}
+
+.react-flow__resize-control.left,
+.react-flow__resize-control.right {
+  cursor: ew-resize;
+}
+
+.react-flow__resize-control.top.left,
+.react-flow__resize-control.bottom.right {
+  cursor: nwse-resize;
+}
+
+.react-flow__resize-control.top.right,
+.react-flow__resize-control.bottom.left {
+  cursor: nesw-resize;
+}
