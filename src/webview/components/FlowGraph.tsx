@@ -82,8 +82,8 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
 
     nodes.forEach((node) => {
       dagreGraph.setNode(node.id, {
-        width: 650,
-        height: 280,
+        width: 850,
+        height: 320,
       });
     });
 

@@ -34,7 +34,6 @@ interface FunctionNodeData extends Record<string, unknown> {
 }
 
 const FunctionNode: React.FC<NodeProps> = ({ data }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const nodeData = data as FunctionNodeData;
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -53,15 +52,18 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
 
   const nodeColors = NODE_COLORS[nodeData.type];
 
-  const previewCode = useMemo(() => {
-    if (!nodeData.code) return "";
-    const lines = nodeData.code.split("\n");
-    return lines.slice(0, 10).join("\n");
-  }, [nodeData.code]);
-
   const totalLines = nodeData.code.split("\n").length;
-  const displayCode = isExpanded ? nodeData.code : previewCode;
-  const editorHeight = isExpanded ? "480px" : "220px";
+  const displayCode = nodeData.code;
+
+  // Monaco Editor: 1 dòng = 19px (line-height) + padding
+  const MONACO_LINE_HEIGHT = 19;
+  const EDITOR_PADDING = 24; // Top + bottom padding
+  const MAX_LINES = 40;
+  const MIN_LINES = 5; // Tối thiểu 5 dòng để tránh quá nhỏ
+
+  const actualLines = Math.max(MIN_LINES, totalLines);
+  const calculatedLines = Math.min(actualLines, MAX_LINES);
+  const editorHeight = calculatedLines * MONACO_LINE_HEIGHT + EDITOR_PADDING;
 
   const handleCodeChange = useCallback(
     (value: string) => {
@@ -176,7 +178,6 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
             ? "function-node-header-function"
             : "function-node-header-method"
         }`}
-        onClick={() => setIsExpanded(!isExpanded)}
       >
         <span className="function-node-type-badge">
           {nodeData.type === "function" ? "Function" : "Method"}
@@ -188,28 +189,27 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
       </div>
 
       <div
-        className={`function-node-body ${
-          isExpanded
-            ? "function-node-body-expanded"
-            : "function-node-body-collapsed"
-        }`}
-        onClick={(e) => e.stopPropagation()}
+        className="function-node-body"
+        style={{
+          height: `${editorHeight}px`,
+          maxHeight:
+            actualLines > MAX_LINES
+              ? `${MAX_LINES * MONACO_LINE_HEIGHT + EDITOR_PADDING}px`
+              : "none",
+          overflowY: actualLines > MAX_LINES ? "auto" : "hidden",
+          overflowX: "hidden",
+        }}
       >
         <div className="function-node-monaco-wrapper">
           <MonacoCodeEditor
             value={displayCode}
             onChange={handleCodeChange}
             language="go"
-            height={editorHeight}
+            height={`${editorHeight}px`}
             readOnly={false}
             lineNumber={nodeData.line}
           />
         </div>
-        {!isExpanded && totalLines > 10 && (
-          <div className="function-node-more-lines">
-            ... {totalLines - 10} more lines (click header to expand)
-          </div>
-        )}
       </div>
 
       <div className="function-node-footer">
