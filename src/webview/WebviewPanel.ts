@@ -63,6 +63,18 @@ export class WebviewPanel {
               message.nodeId
             );
             break;
+          case "resolveDefinitionAtLine":
+            Logger.info(
+              `[WebviewPanel] Resolve definition at: ${message.file}:${message.line}+${message.relativeLine}`
+            );
+            await this.handleResolveDefinition(
+              message.file,
+              message.line,
+              message.relativeLine,
+              message.lineContent,
+              message.nodeId
+            );
+            break;
           case "ready":
             Logger.info("[WebviewPanel] Webview ready, sending graph data");
             const config = vscode.workspace.getConfiguration("goflow");
@@ -293,6 +305,184 @@ export class WebviewPanel {
         error: errorMsg,
       });
     }
+  }
+
+  private async handleResolveDefinition(
+    file: string,
+    startLine: number,
+    relativeLine: number,
+    lineContent: string,
+    sourceNodeId: string
+  ) {
+    try {
+      Logger.info(
+        `[WebviewPanel] Resolving definition for line: ${lineContent}`
+      );
+
+      const uri = vscode.Uri.file(file);
+      const document = await vscode.workspace.openTextDocument(uri);
+
+      // Calculate absolute line in document
+      // startLine là line bắt đầu của function (1-based)
+      // relativeLine là line number trong Monaco editor (1-based)
+      const absoluteLine = startLine + relativeLine - 2; // -2 vì startLine và relativeLine đều 1-based
+
+      Logger.debug(`[WebviewPanel] Absolute line in document: ${absoluteLine}`);
+
+      // Parse line để tìm function calls
+      const functionCallRegex = /\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
+      let match;
+      const functionCalls: Array<{ name: string; index: number }> = [];
+
+      while ((match = functionCallRegex.exec(lineContent)) !== null) {
+        const functionName = match[1];
+        const keywords = [
+          "if",
+          "for",
+          "switch",
+          "return",
+          "defer",
+          "go",
+          "select",
+          "case",
+          "range",
+        ];
+
+        if (!keywords.includes(functionName)) {
+          functionCalls.push({
+            name: functionName,
+            index: match.index,
+          });
+        }
+      }
+
+      Logger.info(
+        `[WebviewPanel] Found ${functionCalls.length} function calls in line`
+      );
+
+      // Thử resolve definition cho từng function call
+      for (const call of functionCalls) {
+        const position = new vscode.Position(absoluteLine, call.index);
+
+        Logger.debug(`[WebviewPanel] Resolving at position:`, {
+          line: absoluteLine,
+          character: call.index,
+          functionName: call.name,
+        });
+
+        try {
+          const definitions = await vscode.commands.executeCommand<
+            vscode.Location[]
+          >("vscode.executeDefinitionProvider", uri, position);
+
+          if (definitions && definitions.length > 0) {
+            const def = definitions[0];
+            const defFilePath = def.uri.fsPath;
+
+            Logger.info(`[WebviewPanel] Definition found:`, {
+              file: defFilePath,
+              line: def.range.start.line + 1,
+            });
+
+            // Bỏ qua stdlib và vendor
+            if (
+              defFilePath.includes("/usr/local/go/") ||
+              defFilePath.includes("/go/pkg/mod/") ||
+              defFilePath.includes("\\go\\pkg\\mod\\") ||
+              defFilePath.includes("/vendor/") ||
+              !defFilePath.endsWith(".go")
+            ) {
+              Logger.debug(
+                `[WebviewPanel] Skipping stdlib/vendor: ${defFilePath}`
+              );
+              continue;
+            }
+
+            // Lấy symbol tại definition
+            const defDocument = await vscode.workspace.openTextDocument(
+              def.uri
+            );
+            const defSymbols = await vscode.commands.executeCommand<
+              vscode.DocumentSymbol[]
+            >("vscode.executeDocumentSymbolProvider", def.uri);
+
+            if (defSymbols) {
+              const targetSymbol = this.findSymbolAtPosition(
+                defSymbols,
+                def.range.start
+              );
+
+              if (targetSymbol && this.isFunctionOrMethod(targetSymbol)) {
+                const targetType = this.getNodeType(targetSymbol.kind);
+                const targetId = `${targetType}_${targetSymbol.name}`;
+
+                Logger.info(`[WebviewPanel] Target node found:`, {
+                  targetId,
+                  targetLabel: targetSymbol.name,
+                });
+
+                // Gửi message về webview để highlight edge
+                this.panel.webview.postMessage({
+                  command: "highlightEdge",
+                  sourceNodeId: sourceNodeId,
+                  targetNodeId: targetId,
+                });
+
+                return; // Chỉ highlight function call đầu tiên
+              }
+            }
+          }
+        } catch (error) {
+          Logger.error(
+            `[WebviewPanel] Failed to resolve definition for ${call.name}`,
+            error
+          );
+        }
+      }
+
+      // Nếu không tìm thấy definition nào, clear highlight
+      Logger.warn(`[WebviewPanel] No valid definition found`);
+      this.panel.webview.postMessage({
+        command: "clearHighlight",
+      });
+    } catch (error) {
+      Logger.error(
+        "[WebviewPanel] Failed to resolve definition at line",
+        error
+      );
+    }
+  }
+
+  private findSymbolAtPosition(
+    symbols: vscode.DocumentSymbol[],
+    position: vscode.Position
+  ): vscode.DocumentSymbol | undefined {
+    for (const symbol of symbols) {
+      if (symbol.range.contains(position)) {
+        if (symbol.children && symbol.children.length > 0) {
+          const childSymbol = this.findSymbolAtPosition(
+            symbol.children,
+            position
+          );
+          if (childSymbol) {
+            return childSymbol;
+          }
+        }
+        return symbol;
+      }
+    }
+    return undefined;
+  }
+
+  private isFunctionOrMethod(symbol: vscode.DocumentSymbol): boolean {
+    return (
+      symbol.kind === vscode.SymbolKind.Function ||
+      symbol.kind === vscode.SymbolKind.Method
+    );
+  }
+
+  private getNodeType(kind: vscode.SymbolKind): "function" | "method" {
+    return kind === vscode.SymbolKind.Function ? "function" : "method";
   }
 
   private async sendCodePreview(file: string, line: number, nodeId: string) {

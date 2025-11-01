@@ -31,6 +31,9 @@ interface FunctionNodeData extends Record<string, unknown> {
   endLine?: number;
   code: string;
   vscode?: any;
+  onHighlightEdge?: (sourceNodeId: string, targetNodeId: string) => void;
+  onClearHighlight?: () => void;
+  allNodes?: any[];
 }
 
 const FunctionNode: React.FC<NodeProps> = ({ data }) => {
@@ -124,6 +127,25 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
     };
   }, []);
 
+  const handleLineClick = useCallback(
+    (lineNumber: number, lineContent: string) => {
+      Logger.info("[FunctionNode] Line clicked:", { lineNumber, lineContent });
+
+      // Gửi request lên backend để VSCode API resolve definition
+      if (nodeData.vscode && nodeData.onHighlightEdge) {
+        nodeData.vscode.postMessage({
+          command: "resolveDefinitionAtLine",
+          file: nodeData.file,
+          line: nodeData.line, // Line number bắt đầu của function
+          relativeLine: lineNumber, // Line number trong editor (relative)
+          lineContent: lineContent,
+          nodeId: nodeData.id,
+        });
+      }
+    },
+    [nodeData]
+  );
+
   return (
     <div className="function-node-container">
       {/* Center Handles Only */}
@@ -208,6 +230,7 @@ const FunctionNode: React.FC<NodeProps> = ({ data }) => {
             height={`${editorHeight}px`}
             readOnly={false}
             lineNumber={nodeData.line}
+            onLineClick={handleLineClick}
           />
         </div>
       </div>

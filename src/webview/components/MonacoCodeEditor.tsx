@@ -19,6 +19,7 @@ interface MonacoCodeEditorProps {
   height?: string;
   readOnly?: boolean;
   lineNumber?: number;
+  onLineClick?: (lineNumber: number, lineContent: string) => void;
 }
 
 const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
@@ -28,6 +29,7 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   height = "300px",
   readOnly = false,
   lineNumber = 1,
+  onLineClick,
 }) => {
   const [isEditorReady, setIsEditorReady] = useState(false);
 
@@ -75,6 +77,19 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
     Logger.info("[MonacoCodeEditor] Editor mounted");
     Logger.info("[MonacoCodeEditor] ReadOnly mode:", readOnly);
     setIsEditorReady(true);
+
+    // Listen to cursor position changes
+    if (onLineClick) {
+      editor.onDidChangeCursorPosition((e: any) => {
+        const lineNumber = e.position.lineNumber;
+        const lineContent = editor.getModel()?.getLineContent(lineNumber) || "";
+        Logger.debug("[MonacoCodeEditor] Cursor moved to line:", {
+          lineNumber,
+          lineContent,
+        });
+        onLineClick(lineNumber, lineContent);
+      });
+    }
 
     // Get theme from VSCode API directly
     let themeName = "vs-dark"; // Default to dark theme

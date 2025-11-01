@@ -61,8 +61,70 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [enableJumpToFile, setEnableJumpToFile] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [highlightedEdges, setHighlightedEdges] = useState<Set<string>>(
+    new Set()
+  );
 
   Logger.info("[FlowGraph] Initial state - isLoading:", isLoading);
+
+  const handleHighlightEdge = useCallback(
+    (sourceNodeId: string, targetNodeId: string) => {
+      Logger.info("[FlowGraph] Highlight edge request:", {
+        sourceNodeId,
+        targetNodeId,
+      });
+
+      setEdges((currentEdges) => {
+        return currentEdges.map((edge) => {
+          const isTargetEdge =
+            edge.source === sourceNodeId && edge.target === targetNodeId;
+
+          if (isTargetEdge) {
+            return {
+              ...edge,
+              animated: true,
+              style: {
+                ...edge.style,
+                stroke: "#FFC107",
+                strokeWidth: 4,
+              },
+            };
+          } else {
+            return {
+              ...edge,
+              animated: false,
+              style: {
+                ...edge.style,
+                stroke: "#666",
+                strokeWidth: 2,
+              },
+            };
+          }
+        });
+      });
+
+      setHighlightedEdges(new Set([`${sourceNodeId}->${targetNodeId}`]));
+    },
+    [setEdges]
+  );
+
+  const handleClearHighlight = useCallback(() => {
+    Logger.info("[FlowGraph] Clear all edge highlights");
+
+    setEdges((currentEdges) => {
+      return currentEdges.map((edge) => ({
+        ...edge,
+        animated: false,
+        style: {
+          ...edge.style,
+          stroke: "#666",
+          strokeWidth: 2,
+        },
+      }));
+    });
+
+    setHighlightedEdges(new Set());
+  }, [setEdges]);
 
   const getLayoutedElements = (
     nodes: FlowNode[],
@@ -128,6 +190,9 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           endLine: node.endLine,
           code: node.code || "",
           vscode: vscode,
+          onHighlightEdge: handleHighlightEdge,
+          onClearHighlight: handleClearHighlight,
+          allNodes: data.nodes,
         },
       }));
 
@@ -232,6 +297,17 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             if (message.data) {
               renderGraph(message.data);
             }
+            break;
+          case "highlightEdge":
+            Logger.info("[FlowGraph] highlightEdge command received", {
+              sourceNodeId: message.sourceNodeId,
+              targetNodeId: message.targetNodeId,
+            });
+            handleHighlightEdge(message.sourceNodeId, message.targetNodeId);
+            break;
+          case "clearHighlight":
+            Logger.info("[FlowGraph] clearHighlight command received");
+            handleClearHighlight();
             break;
           default:
             Logger.info("[FlowGraph] Unknown command:", message.command);
