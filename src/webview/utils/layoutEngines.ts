@@ -5,18 +5,87 @@ import {
   forceLink,
   forceManyBody,
   forceCenter,
+  forceCollide,
 } from "d3-force";
 import { Node, Edge } from "@xyflow/react";
 import { LayoutStrategy } from "../configs/layoutStrategies";
 
 const elk = new ELK();
 
+// ==================== CONSTANTS ====================
+const FILE_GROUP_PADDING = 60; // Padding inside file group container
+const FILE_GROUP_MARGIN = 120; // Margin between file group containers
+const CODE_NODE_WIDTH = 850;
+const CODE_NODE_HEIGHT = 320;
+
+// ==================== HELPER: GROUP NODES BY FILE ====================
+interface FileGroup {
+  fileName: string;
+  nodes: Node[];
+  edges: Edge[]; // Edges nội bộ trong group
+}
+
+function groupNodesByFile(nodes: Node[], edges: Edge[]): FileGroup[] {
+  const nodesByFile = new Map<string, Node[]>();
+
+  // Group code nodes by file
+  nodes.forEach((node) => {
+    if (node.type === "codeEntityNode") {
+      const file = (node.data as any).file;
+      if (!nodesByFile.has(file)) {
+        nodesByFile.set(file, []);
+      }
+      nodesByFile.get(file)!.push(node);
+    }
+  });
+
+  // Create file groups with internal edges
+  const fileGroups: FileGroup[] = [];
+  nodesByFile.forEach((groupNodes, fileName) => {
+    const nodeIds = new Set(groupNodes.map((n) => n.id));
+    const internalEdges = edges.filter(
+      (edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target)
+    );
+
+    fileGroups.push({
+      fileName,
+      nodes: groupNodes,
+      edges: internalEdges,
+    });
+  });
+
+  return fileGroups;
+}
+
+// ==================== HELPER: CALCULATE CROSS-FILE EDGES ====================
+function getCrossFileEdges(groups: FileGroup[], allEdges: Edge[]): Edge[] {
+  const allNodeIds = new Set<string>();
+  groups.forEach((group) => {
+    group.nodes.forEach((node) => allNodeIds.add(node.id));
+  });
+
+  return allEdges.filter((edge) => {
+    const sourceGroup = groups.find((g) =>
+      g.nodes.some((n) => n.id === edge.source)
+    );
+    const targetGroup = groups.find((g) =>
+      g.nodes.some((n) => n.id === edge.target)
+    );
+
+    return (
+      sourceGroup &&
+      targetGroup &&
+      sourceGroup.fileName !== targetGroup.fileName
+    );
+  });
+}
+
 // ==================== DAGRE ====================
-export function layoutWithDagre(
+function layoutGroupWithDagre(
   nodes: Node[],
   edges: Edge[],
   strategy: LayoutStrategy
-): { nodes: Node[]; edges: Edge[] } {
+): Node[] {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
 
@@ -26,12 +95,15 @@ export function layoutWithDagre(
     ranksep: strategy.ranksep || 120,
     nodesep: strategy.nodesep || 80,
     edgesep: 40,
-    marginx: 60,
-    marginy: 60,
+    marginx: FILE_GROUP_PADDING,
+    marginy: FILE_GROUP_PADDING,
   });
 
   nodes.forEach((node) => {
-    dagreGraph.setNode(node.id, { width: 850, height: 320 });
+    dagreGraph.setNode(node.id, {
+      width: CODE_NODE_WIDTH,
+      height: CODE_NODE_HEIGHT,
+    });
   });
 
   edges.forEach((edge) => {
@@ -40,26 +112,137 @@ export function layoutWithDagre(
 
   dagre.layout(dagreGraph);
 
-  const layoutedNodes = nodes.map((node) => {
+  return nodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
     return {
       ...node,
       position: {
-        x: nodeWithPosition.x - 425,
-        y: nodeWithPosition.y - 160,
+        x: nodeWithPosition.x - CODE_NODE_WIDTH / 2,
+        y: nodeWithPosition.y - CODE_NODE_HEIGHT / 2,
       },
     };
   });
-
-  return { nodes: layoutedNodes, edges };
 }
 
-// ==================== ELK LAYERED ====================
-export async function layoutWithELK(
+export function layoutWithDagre(
   nodes: Node[],
   edges: Edge[],
   strategy: LayoutStrategy
-): Promise<{ nodes: Node[]; edges: Edge[] }> {
+): { nodes: Node[]; edges: Edge[] } {
+  const fileGroups = groupNodesByFile(nodes, edges);
+  const crossFileEdges = getCrossFileEdges(fileGroups, edges);
+
+  // Step 1: Layout nodes within each file group
+  const layoutedGroups = fileGroups.map((group) => ({
+    ...group,
+    nodes: layoutGroupWithDagre(group.nodes, group.edges, strategy),
+  }));
+
+  // Step 2: Calculate bounding box for each group
+  interface GroupBounds {
+    fileName: string;
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
+    width: number;
+    height: number;
+    nodes: Node[];
+  }
+
+  const groupBounds: GroupBounds[] = layoutedGroups.map((group) => {
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
+
+    group.nodes.forEach((node) => {
+      const x = node.position.x;
+      const y = node.position.y;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x + CODE_NODE_WIDTH);
+      maxY = Math.max(maxY, y + CODE_NODE_HEIGHT);
+    });
+
+    return {
+      fileName: group.fileName,
+      minX,
+      minY,
+      maxX,
+      maxY,
+      width: maxX - minX,
+      height: maxY - minY,
+      nodes: group.nodes,
+    };
+  });
+
+  // Step 3: Layout file groups as super-nodes using Dagre
+  const superGraph = new dagre.graphlib.Graph();
+  superGraph.setDefaultEdgeLabel(() => ({}));
+
+  const direction = strategy.direction || "TB";
+  superGraph.setGraph({
+    rankdir: direction,
+    ranksep: FILE_GROUP_MARGIN,
+    nodesep: FILE_GROUP_MARGIN,
+    edgesep: FILE_GROUP_MARGIN / 2,
+  });
+
+  groupBounds.forEach((bounds) => {
+    superGraph.setNode(bounds.fileName, {
+      width: bounds.width + FILE_GROUP_PADDING * 2,
+      height: bounds.height + FILE_GROUP_PADDING * 2,
+    });
+  });
+
+  // Add edges between file groups
+  crossFileEdges.forEach((edge) => {
+    const sourceGroup = groupBounds.find((g) =>
+      g.nodes.some((n) => n.id === edge.source)
+    );
+    const targetGroup = groupBounds.find((g) =>
+      g.nodes.some((n) => n.id === edge.target)
+    );
+
+    if (sourceGroup && targetGroup && sourceGroup !== targetGroup) {
+      superGraph.setEdge(sourceGroup.fileName, targetGroup.fileName);
+    }
+  });
+
+  dagre.layout(superGraph);
+
+  // Step 4: Position file groups and adjust node positions
+  const finalNodes: Node[] = [];
+
+  groupBounds.forEach((bounds) => {
+    const superNode = superGraph.node(bounds.fileName);
+    const groupOffsetX =
+      superNode.x - (bounds.width + FILE_GROUP_PADDING * 2) / 2;
+    const groupOffsetY =
+      superNode.y - (bounds.height + FILE_GROUP_PADDING * 2) / 2;
+
+    // Adjust all nodes in this group
+    bounds.nodes.forEach((node) => {
+      finalNodes.push({
+        ...node,
+        position: {
+          x: node.position.x - bounds.minX + groupOffsetX + FILE_GROUP_PADDING,
+          y: node.position.y - bounds.minY + groupOffsetY + FILE_GROUP_PADDING,
+        },
+      });
+    });
+  });
+
+  return { nodes: finalNodes, edges };
+}
+
+// ==================== ELK LAYERED ====================
+async function layoutGroupWithELK(
+  nodes: Node[],
+  edges: Edge[],
+  strategy: LayoutStrategy
+): Promise<Node[]> {
   const graph = {
     id: "root",
     layoutOptions: {
@@ -71,12 +254,12 @@ export async function layoutWithELK(
       ),
       "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
       "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
-      "elk.padding": "[top=60,left=60,bottom=60,right=60]",
+      "elk.padding": `[top=${FILE_GROUP_PADDING},left=${FILE_GROUP_PADDING},bottom=${FILE_GROUP_PADDING},right=${FILE_GROUP_PADDING}]`,
     },
     children: nodes.map((node) => ({
       id: node.id,
-      width: 850,
-      height: 320,
+      width: CODE_NODE_WIDTH,
+      height: CODE_NODE_HEIGHT,
     })),
     edges: edges.map((edge) => ({
       id: edge.id,
@@ -87,7 +270,7 @@ export async function layoutWithELK(
 
   const layoutedGraph = await elk.layout(graph);
 
-  const layoutedNodes = nodes.map((node) => {
+  return nodes.map((node) => {
     const elkNode = layoutedGraph.children?.find((n) => n.id === node.id);
     return {
       ...node,
@@ -97,8 +280,122 @@ export async function layoutWithELK(
       },
     };
   });
+}
 
-  return { nodes: layoutedNodes, edges };
+export async function layoutWithELK(
+  nodes: Node[],
+  edges: Edge[],
+  strategy: LayoutStrategy
+): Promise<{ nodes: Node[]; edges: Edge[] }> {
+  const fileGroups = groupNodesByFile(nodes, edges);
+  const crossFileEdges = getCrossFileEdges(fileGroups, edges);
+
+  // Step 1: Layout nodes within each file group
+  const layoutedGroups = await Promise.all(
+    fileGroups.map(async (group) => ({
+      ...group,
+      nodes: await layoutGroupWithELK(group.nodes, group.edges, strategy),
+    }))
+  );
+
+  // Step 2: Calculate bounding boxes (same as Dagre)
+  interface GroupBounds {
+    fileName: string;
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
+    width: number;
+    height: number;
+    nodes: Node[];
+  }
+
+  const groupBounds: GroupBounds[] = layoutedGroups.map((group) => {
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
+
+    group.nodes.forEach((node) => {
+      const x = node.position.x;
+      const y = node.position.y;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x + CODE_NODE_WIDTH);
+      maxY = Math.max(maxY, y + CODE_NODE_HEIGHT);
+    });
+
+    return {
+      fileName: group.fileName,
+      minX,
+      minY,
+      maxX,
+      maxY,
+      width: maxX - minX,
+      height: maxY - minY,
+      nodes: group.nodes,
+    };
+  });
+
+  // Step 3: Layout file groups using ELK
+  const superGraph = {
+    id: "root",
+    layoutOptions: {
+      "elk.algorithm": "layered",
+      "elk.direction": strategy.direction || "DOWN",
+      "elk.spacing.nodeNode": String(FILE_GROUP_MARGIN),
+      "elk.layered.spacing.nodeNodeBetweenLayers": String(FILE_GROUP_MARGIN),
+    },
+    children: groupBounds.map((bounds) => ({
+      id: bounds.fileName,
+      width: bounds.width + FILE_GROUP_PADDING * 2,
+      height: bounds.height + FILE_GROUP_PADDING * 2,
+    })),
+    edges: crossFileEdges
+      .map((edge) => {
+        const sourceGroup = groupBounds.find((g) =>
+          g.nodes.some((n) => n.id === edge.source)
+        );
+        const targetGroup = groupBounds.find((g) =>
+          g.nodes.some((n) => n.id === edge.target)
+        );
+
+        if (sourceGroup && targetGroup && sourceGroup !== targetGroup) {
+          return {
+            id: `${sourceGroup.fileName}-${targetGroup.fileName}`,
+            sources: [sourceGroup.fileName],
+            targets: [targetGroup.fileName],
+          };
+        }
+        return null;
+      })
+      .filter((e) => e !== null) as any[],
+  };
+
+  const layoutedSuperGraph = await elk.layout(superGraph);
+
+  // Step 4: Position file groups and adjust node positions
+  const finalNodes: Node[] = [];
+
+  groupBounds.forEach((bounds) => {
+    const superNode = layoutedSuperGraph.children?.find(
+      (n) => n.id === bounds.fileName
+    );
+    const groupOffsetX = (superNode?.x || 0) + FILE_GROUP_PADDING;
+    const groupOffsetY = (superNode?.y || 0) + FILE_GROUP_PADDING;
+
+    bounds.nodes.forEach((node) => {
+      finalNodes.push({
+        ...node,
+        position: {
+          x: node.position.x - bounds.minX + groupOffsetX,
+          y: node.position.y - bounds.minY + groupOffsetY,
+        },
+      });
+    });
+  });
+
+  return { nodes: finalNodes, edges };
 }
 
 // ==================== D3 FORCE ====================
@@ -107,28 +404,154 @@ export function layoutWithD3Force(
   edges: Edge[],
   strategy: LayoutStrategy
 ): { nodes: Node[]; edges: Edge[] } {
-  const simulation = forceSimulation(nodes as any)
-    .force(
-      "link",
-      forceLink(edges as any)
-        .id((d: any) => d.id)
-        .distance(150)
-    )
-    .force("charge", forceManyBody().strength(-1000))
-    .force("center", forceCenter(400, 300))
-    .stop();
+  const fileGroups = groupNodesByFile(nodes, edges);
+  const crossFileEdges = getCrossFileEdges(fileGroups, edges);
 
-  // Run simulation synchronously
-  for (let i = 0; i < 300; i++) {
-    simulation.tick();
+  // Step 1: Layout each file group independently
+  const layoutedGroups = fileGroups.map((group) => {
+    const simulation = forceSimulation(group.nodes as any)
+      .force(
+        "link",
+        forceLink(group.edges as any)
+          .id((d: any) => d.id)
+          .distance(150)
+      )
+      .force("charge", forceManyBody().strength(-800))
+      .force("center", forceCenter(0, 0))
+      .force("collision", forceCollide(CODE_NODE_WIDTH / 2 + 40))
+      .stop();
+
+    // Run simulation
+    for (let i = 0; i < 300; i++) {
+      simulation.tick();
+    }
+
+    return {
+      ...group,
+      nodes: group.nodes.map((node: any) => ({
+        ...node,
+        position: { x: node.x || 0, y: node.y || 0 },
+      })),
+    };
+  });
+
+  // Step 2: Calculate bounding boxes
+  interface GroupBounds {
+    fileName: string;
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
+    width: number;
+    height: number;
+    nodes: Node[];
+    centerX: number;
+    centerY: number;
   }
 
-  const layoutedNodes = nodes.map((node: any) => ({
-    ...node,
-    position: { x: node.x || 0, y: node.y || 0 },
+  const groupBounds: GroupBounds[] = layoutedGroups.map((group) => {
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
+
+    group.nodes.forEach((node) => {
+      const x = node.position.x;
+      const y = node.position.y;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x + CODE_NODE_WIDTH);
+      maxY = Math.max(maxY, y + CODE_NODE_HEIGHT);
+    });
+
+    return {
+      fileName: group.fileName,
+      minX,
+      minY,
+      maxX,
+      maxY,
+      width: maxX - minX,
+      height: maxY - minY,
+      centerX: (minX + maxX) / 2,
+      centerY: (minY + maxY) / 2,
+      nodes: group.nodes,
+    };
+  });
+
+  // Step 3: Create super-nodes for file groups
+  const superNodes = groupBounds.map((bounds) => ({
+    id: bounds.fileName,
+    x: 0,
+    y: 0,
+    width: bounds.width + FILE_GROUP_PADDING * 2,
+    height: bounds.height + FILE_GROUP_PADDING * 2,
+    bounds,
   }));
 
-  return { nodes: layoutedNodes, edges };
+  // Step 4: Apply force simulation to super-nodes
+  const superLinks = crossFileEdges
+    .map((edge) => {
+      const sourceGroup = groupBounds.find((g) =>
+        g.nodes.some((n) => n.id === edge.source)
+      );
+      const targetGroup = groupBounds.find((g) =>
+        g.nodes.some((n) => n.id === edge.target)
+      );
+
+      if (sourceGroup && targetGroup) {
+        return {
+          source: sourceGroup.fileName,
+          target: targetGroup.fileName,
+        };
+      }
+      return null;
+    })
+    .filter((link) => link !== null) as Array<{
+    source: string;
+    target: string;
+  }>;
+
+  const superSimulation = forceSimulation(superNodes as any)
+    .force(
+      "link",
+      forceLink(superLinks)
+        .id((d: any) => d.id)
+        .distance(400)
+    )
+    .force("charge", forceManyBody().strength(-2000))
+    .force("center", forceCenter(0, 0))
+    .force(
+      "collision",
+      forceCollide(
+        (d: any) => Math.max(d.width, d.height) / 2 + FILE_GROUP_MARGIN
+      )
+    )
+    .stop();
+
+  for (let i = 0; i < 300; i++) {
+    superSimulation.tick();
+  }
+
+  // Step 5: Position all nodes based on super-node positions
+  const finalNodes: Node[] = [];
+
+  superNodes.forEach((superNode: any) => {
+    const bounds = superNode.bounds;
+    const offsetX = superNode.x - bounds.centerX;
+    const offsetY = superNode.y - bounds.centerY;
+
+    bounds.nodes.forEach((node: Node) => {
+      finalNodes.push({
+        ...node,
+        position: {
+          x: node.position.x + offsetX,
+          y: node.position.y + offsetY,
+        },
+      });
+    });
+  });
+
+  return { nodes: finalNodes, edges };
 }
 
 // ==================== MAIN DISPATCHER ====================
