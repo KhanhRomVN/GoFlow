@@ -168,8 +168,10 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         const containerWidth = maxX - minX + padding * 2;
         const containerHeight = maxY - minY + padding * 2;
 
+        const containerId = `container-${file}`;
+
         containerNodes.push({
-          id: `container-${file}`,
+          id: containerId,
           type: "fileGroupContainer" as const,
           position: {
             x: minX - padding,
@@ -190,7 +192,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           },
         } as FlowNode);
       });
-
       return containerNodes;
     },
     []
@@ -375,12 +376,15 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
   // Auto-update containers when nodes move
   useEffect(() => {
     const codeNodes = nodes.filter((n) => n.type === "codeEntityNode");
-    if (codeNodes.length === 0) return;
+    if (codeNodes.length === 0) {
+      return;
+    }
 
     // Chỉ update khi không có container hoặc số lượng code nodes thay đổi
     const currentContainers = nodes.filter(
       (n) => n.type === "fileGroupContainer"
     );
+
     if (currentContainers.length > 0 && codeNodes.length > 0) {
       // Đã có containers, chỉ cần update khi position thay đổi
       const containerNodes = calculateFileGroupContainers(codeNodes);
@@ -390,38 +394,54 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         const oldContainer = currentContainers.find(
           (c) => c.id === newContainer.id
         );
-        if (!oldContainer) return true;
+        if (!oldContainer) {
+          return true;
+        }
 
-        return (
-          Math.abs(oldContainer.position.x - newContainer.position.x) > 1 ||
-          Math.abs(oldContainer.position.y - newContainer.position.y) > 1 ||
-          Math.abs(
-            ((oldContainer.style?.width as number) || 0) -
-              ((newContainer.style?.width as number) || 0)
-          ) > 1 ||
-          Math.abs(
-            ((oldContainer.style?.height as number) || 0) -
-              ((newContainer.style?.height as number) || 0)
-          ) > 1
+        const posXDiff = Math.abs(
+          oldContainer.position.x - newContainer.position.x
         );
+        const posYDiff = Math.abs(
+          oldContainer.position.y - newContainer.position.y
+        );
+        const widthDiff = Math.abs(
+          ((oldContainer.style?.width as number) || 0) -
+            ((newContainer.style?.width as number) || 0)
+        );
+        const heightDiff = Math.abs(
+          ((oldContainer.style?.height as number) || 0) -
+            ((newContainer.style?.height as number) || 0)
+        );
+
+        const hasChanged =
+          posXDiff > 1 || posYDiff > 1 || widthDiff > 1 || heightDiff > 1;
+
+        return hasChanged;
       });
 
-      if (!needsUpdate) return;
+      if (!needsUpdate) {
+        return;
+      }
 
       setNodes((currentNodes) => {
         const withoutContainers = currentNodes.filter(
           (n) => n.type !== "fileGroupContainer"
         );
-        return [...containerNodes, ...withoutContainers];
+        const updatedNodes = [...containerNodes, ...withoutContainers];
+
+        return updatedNodes;
       });
     } else if (currentContainers.length === 0 && codeNodes.length > 0) {
       // Chưa có containers, tạo mới
       const containerNodes = calculateFileGroupContainers(codeNodes);
+
       setNodes((currentNodes) => {
         const withoutContainers = currentNodes.filter(
           (n) => n.type !== "fileGroupContainer"
         );
-        return [...containerNodes, ...withoutContainers];
+        const updatedNodes = [...containerNodes, ...withoutContainers];
+
+        return updatedNodes;
       });
     }
   }, [nodes, calculateFileGroupContainers, setNodes]);
