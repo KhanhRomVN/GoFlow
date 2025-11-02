@@ -111,6 +111,7 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
           relativeLine: lineNumber,
           lineContent: lineContent,
           nodeId: nodeData.id,
+          shouldTracePath: true,
         });
       }
     },

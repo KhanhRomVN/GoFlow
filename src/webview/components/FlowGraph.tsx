@@ -16,22 +16,10 @@ import "../styles/flow-graph.css";
 import CodeEntityNode from "./CodeEntityNode";
 import FileGroupContainer from "./FileGroupContainer";
 import { GraphData } from "../../models/Node";
-import { Logger } from "../../utils/webviewLogger";
-import {
-  detectFramework,
-  FRAMEWORK_LAYOUT_STRATEGIES,
-  FrameworkConfig,
-} from "../configs/layoutStrategies";
+import { detectFramework, FrameworkConfig } from "../configs/layoutStrategies";
 import { applyLayout } from "../utils/layoutEngines";
-
-const NODE_COLORS = {
-  function: "#4CAF50",
-  method: "#2196F3",
-} as const;
-
-const DEFAULT_NODE_WIDTH = 320;
-const DEFAULT_NODE_HEIGHT = 180;
-const PREVIEW_LINES = 8;
+import { EdgeTracker, EdgeConnection } from "../utils/EdgeTracker";
+import { Logger } from "../../utils/webviewLogger";
 
 interface CodeEntityNodeData extends Record<string, unknown> {
   id: string;
@@ -203,6 +191,34 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
       setNodeHighlightedEdges(edgeKeys);
       setHighlightedNodeId(targetNodeId);
 
+      const allNodesData = nodes
+        .filter((n) => n.type === "codeEntityNode")
+        .map((n) => ({
+          id: n.id,
+          label: (n.data as CodeEntityNodeData).label,
+          type: (n.data as CodeEntityNodeData).type,
+          file: (n.data as CodeEntityNodeData).file,
+          line: (n.data as CodeEntityNodeData).line,
+        }));
+
+      const tracedPath = EdgeTracker.tracePathsToRoot(
+        targetNodeId,
+        allNodesData
+      );
+
+      if (tracedPath) {
+        EdgeTracker.logTracedPaths(tracedPath);
+
+        const report = EdgeTracker.getFormattedPathReport(tracedPath);
+        console.log("\n" + report);
+
+        vscode.postMessage({
+          command: "showPathTrace",
+          tracedPath: tracedPath,
+          formattedReport: report,
+        });
+      }
+
       setEdges((currentEdges) => {
         return currentEdges.map((edge) => {
           const currentEdgeKey = `${edge.source}->${edge.target}`;
@@ -281,7 +297,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         });
       });
     },
-    [edges, setEdges, lineHighlightedEdges, setNodes]
+    [edges, setEdges, lineHighlightedEdges, setNodes, nodes, vscode]
   );
 
   const handleClearNodeHighlight = useCallback(() => {
@@ -429,6 +445,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
   const convertToFlowData = useCallback(
     (data: GraphData): { nodes: FlowNode[]; edges: FlowEdge[] } => {
       const flowNodes: FlowNode[] = [];
+      const edgeConnections: EdgeConnection[] = [];
 
       data.nodes.forEach((node) => {
         if (node.type === "function" || node.type === "method") {
@@ -467,22 +484,41 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           const targetExists = flowNodes.some((n) => n.id === edge.target);
           return sourceExists && targetExists;
         })
-        .map((edge, index) => ({
-          id: `edge-${edge.source}-${edge.target}-${index}`,
-          source: edge.source,
-          target: edge.target,
-          type: "default",
-          animated: false,
-          style: {
-            stroke: "#666",
-            strokeWidth: 2,
-            strokeLinecap: "round",
-          },
-          pathOptions: {
-            borderRadius: 20,
-            curvature: 0.5,
-          },
-        }));
+        .map((edge, index) => {
+          const sourceNode = data.nodes.find((n) => n.id === edge.source);
+          const targetNode = data.nodes.find((n) => n.id === edge.target);
+
+          if (sourceNode && targetNode) {
+            edgeConnections.push({
+              source: edge.source,
+              target: edge.target,
+              sourceLabel: sourceNode.label,
+              targetLabel: targetNode.label,
+              sourceType: sourceNode.type as "function" | "method",
+              targetType: targetNode.type as "function" | "method",
+              timestamp: Date.now(),
+            });
+          }
+
+          return {
+            id: `edge-${edge.source}-${edge.target}-${index}`,
+            source: edge.source,
+            target: edge.target,
+            type: "default",
+            animated: false,
+            style: {
+              stroke: "#666",
+              strokeWidth: 2,
+              strokeLinecap: "round",
+            },
+            pathOptions: {
+              borderRadius: 20,
+              curvature: 0.5,
+            },
+          };
+        });
+
+      EdgeTracker.updateEdges(edgeConnections);
 
       return { nodes: flowNodes, edges: flowEdges };
     },
@@ -495,6 +531,18 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
       lineHighlightedEdges,
     ]
   );
+
+  useEffect(() => {
+    const unsubscribe = EdgeTracker.subscribe((edges) => {
+      Logger.info(
+        `[FlowGraph] EdgeTracker updated: ${edges.length} edges tracked`
+      );
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   const renderGraph = useCallback(
     async (data: GraphData, fileName?: string) => {
@@ -673,6 +721,9 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           case "clearHighlight":
             handleClearHighlight();
             break;
+          case "tracePathForLineClick":
+            handleNodeHighlight(message.targetNodeId);
+            break;
           default:
             console.log("❓ [FlowGraph] Unknown command:", message.command);
         }
@@ -778,6 +829,25 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               title="Export"
             >
               💾
+            </button>
+            <button
+              onClick={() => {
+                const stats = EdgeTracker.getStats();
+                EdgeTracker.logCurrentState();
+
+                console.log("\n" + EdgeTracker.getEdgeListFormatted());
+
+                vscode.postMessage({
+                  command: "showEdgeStats",
+                  stats: stats,
+                  edges: EdgeTracker.getAllEdges(),
+                  formattedReport: EdgeTracker.getEdgeListFormatted(),
+                });
+              }}
+              className="flow-graph-button flow-graph-button-primary"
+              title="Show Edge Statistics"
+            >
+              📊
             </button>
           </Panel>
 

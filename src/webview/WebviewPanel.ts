@@ -63,7 +63,8 @@ export class WebviewPanel {
               message.line,
               message.relativeLine,
               message.lineContent,
-              message.nodeId
+              message.nodeId,
+              message.shouldTracePath
             );
             break;
           case "ready":
@@ -293,7 +294,8 @@ export class WebviewPanel {
     startLine: number,
     relativeLine: number,
     lineContent: string,
-    sourceNodeId: string
+    sourceNodeId: string,
+    shouldTracePath: boolean = false
   ) {
     try {
       const uri = vscode.Uri.file(file);
@@ -387,7 +389,14 @@ export class WebviewPanel {
                   targetNodeId: targetId,
                 });
 
-                return; // Chỉ highlight function call đầu tiên
+                if (shouldTracePath) {
+                  this.panel.webview.postMessage({
+                    command: "tracePathForLineClick",
+                    targetNodeId: targetId,
+                  });
+                }
+
+                return;
               }
             }
           }
