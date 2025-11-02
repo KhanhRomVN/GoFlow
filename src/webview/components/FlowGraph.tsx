@@ -159,6 +159,29 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
   const debouncedNodes = useDebounce(nodes, 100);
   const lastContainerUpdateRef = useRef<string>("");
 
+  const getOriginalDashArray = useCallback(
+    (edge: FlowEdge): string | undefined => {
+      // Priority 1: Từ style hiện tại
+      if (edge.style?.strokeDasharray) {
+        return edge.style.strokeDasharray as string;
+      }
+
+      // Priority 2: Từ data.dashed flag
+      if (edge.data?.dashed === true) {
+        return "8 4";
+      }
+
+      // Priority 3: Từ data.hasReturnValue (fallback)
+      if (edge.data?.hasReturnValue === false) {
+        return "8 4";
+      }
+
+      // Default: solid line
+      return undefined;
+    },
+    []
+  );
+
   const handleToggleDrawer = useCallback(() => {
     setIsDrawerOpen((prev) => !prev);
   }, []);
@@ -197,7 +220,20 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           const isLineHighlighted = currentEdgeKey === edgeKey;
           const isNodeHighlighted = nodeHighlightedEdges.has(currentEdgeKey);
 
+          // ✅ SỬA: Dùng helper function
+          const originalDashArray = getOriginalDashArray(edge);
+
+          Logger.debug(`[FlowGraph] Updating edge: ${currentEdgeKey}`);
+          Logger.debug(
+            `[FlowGraph] → Original strokeDasharray: ${originalDashArray}`
+          );
+          Logger.debug(`[FlowGraph] → edge.data.dashed: ${edge.data?.dashed}`);
+          Logger.debug(
+            `[FlowGraph] → edge.data.hasReturnValue: ${edge.data?.hasReturnValue}`
+          );
+
           if (isLineHighlighted) {
+            Logger.debug(`[FlowGraph] → LINE HIGHLIGHT: Setting yellow`);
             return {
               ...edge,
               animated: true,
@@ -205,12 +241,14 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
                 ...edge.style,
                 stroke: "#FFC107",
                 strokeWidth: 4,
+                strokeDasharray: originalDashArray,
               },
               zIndex: 1000,
             };
           }
 
           if (isNodeHighlighted) {
+            Logger.debug(`[FlowGraph] → NODE HIGHLIGHT: Setting red`);
             return {
               ...edge,
               animated: true,
@@ -218,11 +256,13 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
                 ...edge.style,
                 stroke: "#FF6B6B",
                 strokeWidth: 3,
+                strokeDasharray: originalDashArray,
               },
               zIndex: 999,
             };
           }
 
+          Logger.debug(`[FlowGraph] → DEFAULT: No highlight`);
           return {
             ...edge,
             animated: false,
@@ -230,13 +270,14 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               ...edge.style,
               stroke: "#666",
               strokeWidth: 2,
+              strokeDasharray: originalDashArray,
             },
             zIndex: 1,
           };
         });
       });
     },
-    [setEdges, nodeHighlightedEdges]
+    [setEdges, nodeHighlightedEdges, getOriginalDashArray]
   );
 
   const handleClearHighlight = useCallback(() => {
@@ -247,6 +288,9 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         const currentEdgeKey = `${edge.source}->${edge.target}`;
         const isNodeHighlighted = nodeHighlightedEdges.has(currentEdgeKey);
 
+        // ✅ SỬA: Dùng helper function
+        const originalDashArray = getOriginalDashArray(edge);
+
         if (isNodeHighlighted) {
           return {
             ...edge,
@@ -255,6 +299,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               ...edge.style,
               stroke: "#FF6B6B",
               strokeWidth: 3,
+              strokeDasharray: originalDashArray,
             },
             zIndex: 999,
           };
@@ -267,12 +312,13 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             ...edge.style,
             stroke: "#666",
             strokeWidth: 2,
+            strokeDasharray: originalDashArray,
           },
           zIndex: 1,
         };
       });
     });
-  }, [setEdges, nodeHighlightedEdges]);
+  }, [setEdges, nodeHighlightedEdges, getOriginalDashArray]);
 
   const handleNodeHighlight = useCallback(
     (targetNodeId: string) => {
@@ -337,6 +383,9 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           const isLineHighlighted = lineHighlightedEdges.has(currentEdgeKey);
           const isNodeHighlighted = edgeKeys.has(currentEdgeKey);
 
+          // ✅ SỬA: Dùng helper function
+          const originalDashArray = getOriginalDashArray(edge);
+
           if (isLineHighlighted) {
             return {
               ...edge,
@@ -345,6 +394,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
                 ...edge.style,
                 stroke: "#FFC107",
                 strokeWidth: 4,
+                strokeDasharray: originalDashArray,
               },
               zIndex: 1000,
             };
@@ -358,6 +408,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
                 ...edge.style,
                 stroke: "#FF6B6B",
                 strokeWidth: 3,
+                strokeDasharray: originalDashArray,
               },
               zIndex: 999,
             };
@@ -370,6 +421,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               ...edge.style,
               stroke: "#666",
               strokeWidth: 2,
+              strokeDasharray: originalDashArray,
             },
             zIndex: 1,
           };
@@ -451,6 +503,9 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         const currentEdgeKey = `${edge.source}->${edge.target}`;
         const isLineHighlighted = lineHighlightedEdges.has(currentEdgeKey);
 
+        // ✅ SỬA: Dùng helper function
+        const originalDashArray = getOriginalDashArray(edge);
+
         if (isLineHighlighted) {
           return {
             ...edge,
@@ -459,6 +514,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               ...edge.style,
               stroke: "#FFC107",
               strokeWidth: 4,
+              strokeDasharray: originalDashArray,
             },
             zIndex: 1000,
           };
@@ -471,6 +527,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             ...edge.style,
             stroke: "#666",
             strokeWidth: 2,
+            strokeDasharray: originalDashArray,
           },
           zIndex: 1,
         };
@@ -487,7 +544,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         },
       }));
     });
-  }, [setEdges, lineHighlightedEdges, setNodes]);
+  }, [setEdges, lineHighlightedEdges, setNodes, getOriginalDashArray]);
 
   const calculateFileGroupContainers = useCallback(
     (nodes: FlowNode[]): FlowNode[] => {
@@ -630,8 +687,23 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           const sourceNode = data.nodes.find((n) => n.id === edge.source);
           const targetNode = data.nodes.find((n) => n.id === edge.target);
 
-          // Xác định edge style dựa trên hasReturnValue
+          // ✅ LOG: In ra thông tin edge trước khi style
+          Logger.debug(
+            `[FlowGraph] Processing edge: ${edge.source} → ${edge.target}`
+          );
+          Logger.debug(
+            `[FlowGraph] → hasReturnValue from backend: ${edge.hasReturnValue}`
+          );
+
+          // ✅ Xác định edge style: solid (return value used) vs dashed (no return value used)
           const hasReturnValue = edge.hasReturnValue ?? true;
+
+          // ✅ LOG: In ra style decision
+          Logger.debug(`[FlowGraph] → Final hasReturnValue: ${hasReturnValue}`);
+          Logger.debug(
+            `[FlowGraph] → Style: ${hasReturnValue ? "SOLID" : "DASHED"}`
+          );
+
           const edgeStyle = hasReturnValue
             ? {
                 stroke: "#666",
@@ -639,11 +711,35 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
                 strokeLinecap: "round" as const,
               }
             : {
-                stroke: "#999",
+                stroke: "#888", // Màu nhạt hơn cho dashed
                 strokeWidth: 2,
                 strokeLinecap: "round" as const,
-                strokeDasharray: "5,5",
+                strokeDasharray: "8 4", // Nét đứt rõ ràng hơn
               };
+
+          Logger.debug(`[FlowGraph] → Edge style:`, edgeStyle);
+
+          // ✅ THÊM LOG KIỂM TRA FINAL EDGE OBJECT
+          const finalEdge = {
+            id: `edge-${edge.source}-${edge.target}-${index}`,
+            source: edge.source,
+            target: edge.target,
+            type: "default",
+            animated: false,
+            style: edgeStyle,
+            data: {
+              hasReturnValue: hasReturnValue, // ✅ Store for later use
+            },
+            pathOptions: {
+              borderRadius: 20,
+              curvature: 0.5,
+            },
+          };
+
+          Logger.debug(`[FlowGraph] → Final edge object:`, finalEdge);
+          Logger.debug(
+            `[FlowGraph] → Edge will be ${hasReturnValue ? "SOLID" : "DASHED"}`
+          );
 
           if (sourceNode && targetNode) {
             edgeConnections.push({
@@ -664,6 +760,11 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             type: "default",
             animated: false,
             style: edgeStyle,
+            data: {
+              dashed: !hasReturnValue,
+              solid: hasReturnValue,
+              hasReturnValue: hasReturnValue, // ✅ THÊM BACKUP FIELD
+            },
             pathOptions: {
               borderRadius: 20,
               curvature: 0.5,

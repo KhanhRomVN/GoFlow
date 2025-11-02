@@ -130,3 +130,38 @@
 .react-flow__resize-control.bottom.left {
   cursor: nesw-resize;
 }
+
+/* ===================================
+   DEBUG: DASHED EDGE STYLE
+   =================================== */
+
+/* ✅ Đảm bảo dashed edges luôn hiển thị đúng */
+.react-flow__edge[data-dashed="true"] .react-flow__edge-path {
+  stroke-dasharray: 8, 4 !important;
+}
+
+.react-flow__edge[data-solid="true"] .react-flow__edge-path {
+  stroke-dasharray: none !important;
+}
+
+/* ===================================
+   FORCE DASHED EDGES - CRITICAL FIX
+   =================================== */
+
+/* Đảm bảo edges với data.dashed=true luôn hiển thị dashed */
+.react-flow__edge[data-dashed="true"] path,
+.react-flow__edge[data-dashed="true"] .react-flow__edge-path {
+  stroke-dasharray: 8 4 !important;
+}
+
+/* Đảm bảo edges với data.solid=true luôn hiển thị solid */
+.react-flow__edge[data-solid="true"] path,
+.react-flow__edge[data-solid="true"] .react-flow__edge-path {
+  stroke-dasharray: none !important;
+}
+
+/* Backup: Nếu edge có class .dashed */
+.react-flow__edge.dashed path,
+.react-flow__edge.dashed .react-flow__edge-path {
+  stroke-dasharray: 8 4 !important;
+}

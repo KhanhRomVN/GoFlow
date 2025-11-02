@@ -566,14 +566,18 @@ export async function applyLayout(
   edges: Edge[],
   strategy: LayoutStrategy
 ): Promise<{ nodes: Node[]; edges: Edge[] }> {
-  // Update edge types
+  // Update edge types - PRESERVE strokeDasharray from original edge
   const styledEdges = edges.map((edge) => ({
     ...edge,
     type: strategy.edgeType,
     style: {
-      stroke: "#666",
-      strokeWidth: 2,
-      strokeLinecap: "round" as const,
+      ...edge.style,
+      stroke: edge.style?.stroke || "#666",
+      strokeWidth: edge.style?.strokeWidth || 2,
+      strokeLinecap: (edge.style?.strokeLinecap || "round") as
+        | "round"
+        | "butt"
+        | "square",
       strokeLinejoin: "round" as const,
     },
   }));

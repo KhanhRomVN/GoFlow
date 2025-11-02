@@ -47,6 +47,9 @@ export class GoParser {
           // Bỏ qua nested functions
           const parentSymbol = this.findParentSymbol(symbols, symbol);
           if (parentSymbol && this.isFunctionOrMethod(parentSymbol)) {
+            Logger.debug(
+              `[GoParser] Skipping nested function: ${symbol.name} (parent: ${parentSymbol.name})`
+            );
             continue;
           }
 
@@ -54,7 +57,16 @@ export class GoParser {
           const cleanName = this.extractCleanFunctionName(symbol.name);
           const nodeId = `${nodeType}_${cleanName}`;
 
-          const callees = await this.findFunctionCallsWithLSP(document, symbol);
+          // ✅ CRITICAL: Phải dùng findFunctionCallsWithReturnUsage, KHÔNG phải findFunctionCallsWithLSP
+          const callees = await this.findFunctionCallsWithReturnUsage(
+            document,
+            symbol,
+            nodeMap
+          );
+
+          Logger.debug(
+            `[GoParser] Function ${nodeId} has ${callees.length} callees`
+          );
 
           for (const callee of callees) {
             const edgeKey = `${nodeId}->${callee.target}`;
@@ -63,15 +75,17 @@ export class GoParser {
             }
 
             if (!edgeMap.get(nodeId)!.has(callee.target)) {
-              // Lấy target node từ nodeMap
-              const targetNode = nodeMap.get(callee.target);
-              const hasReturnValue = targetNode?.hasReturnValue ?? true;
+              // ✅ LOG: Xác nhận edge được tạo với hasReturnValue
+              Logger.debug(`[GoParser] Creating edge: ${edgeKey}`);
+              Logger.debug(
+                `[GoParser] → usesReturnValue: ${callee.usesReturnValue}`
+              );
 
               edges.push({
                 source: nodeId,
                 target: callee.target,
                 type: "calls",
-                hasReturnValue,
+                hasReturnValue: callee.usesReturnValue, // ✅ MUST HAVE THIS
               });
               edgeMap.get(nodeId)!.add(callee.target);
             }
@@ -100,6 +114,237 @@ export class GoParser {
       Logger.error("Failed to parse Go file", error);
       throw error;
     }
+  }
+
+  private detectReturnValueUsage(
+    line: string,
+    callPosition: number,
+    functionName: string
+  ): boolean {
+    const beforeCall = line.substring(0, callPosition).trim();
+    const trimmedLine = line.trim();
+
+    // ✅ Đoạn từ đầu line đến sau function call (bao gồm cả tên function)
+    const lineUpToCall = line.substring(0, callPosition + functionName.length);
+
+    Logger.debug(`[GoParser.detectReturnValueUsage] Function: ${functionName}`);
+    Logger.debug(`[GoParser.detectReturnValueUsage] Full line: "${line}"`);
+    Logger.debug(
+      `[GoParser.detectReturnValueUsage] Before call: "${beforeCall}"`
+    );
+    Logger.debug(
+      `[GoParser.detectReturnValueUsage] Line up to call: "${lineUpToCall}"`
+    );
+
+    // ═══════════════════════════════════════════════════════════
+    // PRIORITY 1: Check TOÀN BỘ LINE cho assignment patterns
+    // ═══════════════════════════════════════════════════════════
+
+    // Pattern 1a: Short variable declaration (:=) trong toàn bộ line up to call
+    if (/:=/.test(lineUpToCall)) {
+      Logger.debug(
+        `[GoParser.detectReturnValueUsage] → USED (short variable declaration :=)`
+      );
+      return true;
+    }
+
+    // Pattern 1b: Regular assignment (=) trong toàn bộ line up to call
+    if (/[^=!<>]=(?!=)/.test(lineUpToCall)) {
+      Logger.debug(
+        `[GoParser.detectReturnValueUsage] → USED (regular assignment =)`
+      );
+      return true;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // PRIORITY 2: Check beforeCall cho immediate context
+    // ═══════════════════════════════════════════════════════════
+
+    // Pattern 2: Return statement
+    if (/\breturn\s+$/.test(beforeCall)) {
+      Logger.debug(
+        `[GoParser.detectReturnValueUsage] → USED (return statement)`
+      );
+      return true;
+    }
+
+    // Pattern 3: Comparison operators
+    if (/[!=<>]+\s*$/.test(beforeCall)) {
+      Logger.debug(`[GoParser.detectReturnValueUsage] → USED (comparison)`);
+      return true;
+    }
+
+    // Pattern 4: Function argument hoặc nested call
+    if (/[,(]\s*$/.test(beforeCall)) {
+      Logger.debug(
+        `[GoParser.detectReturnValueUsage] → USED (function argument)`
+      );
+      return true;
+    }
+
+    // Pattern 5: If/for/switch condition
+    if (/\b(if|for|switch)\s*\(\s*$/.test(beforeCall)) {
+      Logger.debug(`[GoParser.detectReturnValueUsage] → USED (condition)`);
+      return true;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // PRIORITY 3: Detect STANDALONE CALL (không dùng return value)
+    // ═══════════════════════════════════════════════════════════
+
+    // Pattern 6: Defer, go statements (không dùng return value)
+    if (/\b(defer|go)\s+$/.test(beforeCall)) {
+      Logger.debug(`[GoParser.detectReturnValueUsage] → NOT USED (defer/go)`);
+      return false;
+    }
+
+    // Pattern 7: Standalone call - CHỈ có tên function/method, không có context
+    // Đặc biệt quan trọng: logger.Error() calls thường là standalone
+    const standalonePattern = /^(\s*)(\w+\.)*\w+\s*$/;
+    const checkStr = line
+      .substring(0, callPosition + functionName.length)
+      .trim();
+
+    // THÊM: Kiểm tra xem có phải là method call không dùng return value
+    if (standalonePattern.test(checkStr)) {
+      Logger.debug(
+        `[GoParser.detectReturnValueUsage] → NOT USED (standalone call)`
+      );
+      return false;
+    }
+
+    // Pattern 8: Inside block start (statement sau dấu {)
+    if (/{\s*$/.test(beforeCall)) {
+      Logger.debug(
+        `[GoParser.detectReturnValueUsage] → NOT USED (inside block)`
+      );
+      return false;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // ĐẶC BIỆT: Xử lý logger.Error() và các logging calls
+    // ═══════════════════════════════════════════════════════════
+
+    // Nếu là logging method (Error, Info, Debug, Warn, v.v.) và không có assignment
+    const loggingMethods = [
+      "Error",
+      "Info",
+      "Debug",
+      "Warn",
+      "Log",
+      "Print",
+      "Printf",
+      "Println",
+    ];
+    if (loggingMethods.includes(functionName)) {
+      // Kiểm tra xem có phải là standalone logging call không
+      const loggingPattern = /^(\s*)(\w+\.)*\w+\s*$/;
+      if (loggingPattern.test(checkStr)) {
+        Logger.debug(
+          `[GoParser.detectReturnValueUsage] → NOT USED (logging call)`
+        );
+        return false;
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // DEFAULT: Nếu không match pattern nào
+    // ═══════════════════════════════════════════════════════════
+
+    if (beforeCall.length > 0 && !/^\s*$/.test(beforeCall)) {
+      Logger.debug(
+        `[GoParser.detectReturnValueUsage] → USED (complex context - default assume used)`
+      );
+      return true;
+    }
+
+    // Nếu không có gì trước function call → standalone
+    Logger.debug(`[GoParser.detectReturnValueUsage] → NOT USED (no context)`);
+    return false;
+  }
+
+  private async findFunctionCallsWithReturnUsage(
+    document: vscode.TextDocument,
+    symbol: vscode.DocumentSymbol,
+    nodeMap: Map<string, Node>
+  ): Promise<Array<{ target: string; usesReturnValue: boolean }>> {
+    const callees: Array<{ target: string; usesReturnValue: boolean }> = [];
+    const text = document.getText(symbol.range);
+    const lines = text.split("\n");
+
+    const functionCallRegex = /\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
+
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      if (lineIndex === 0) {
+        continue;
+      }
+
+      const line = lines[lineIndex];
+      let match;
+
+      while ((match = functionCallRegex.exec(line)) !== null) {
+        const functionName = match[1];
+        const charIndex = match.index;
+
+        Logger.debug(
+          `[GoParser] Found function call: ${functionName} at line ${lineIndex}, char ${charIndex}`
+        );
+        Logger.debug(`[GoParser] Line content: "${line}"`);
+
+        const absoluteLine = symbol.range.start.line + lineIndex;
+        const position = new vscode.Position(absoluteLine, charIndex);
+
+        try {
+          const definitions = await vscode.commands.executeCommand<
+            vscode.Location[]
+          >("vscode.executeDefinitionProvider", document.uri, position);
+
+          if (definitions && definitions.length > 0) {
+            const def = definitions[0];
+
+            if (def.uri.fsPath === document.fileName) {
+              const defSymbols = await vscode.commands.executeCommand<
+                vscode.DocumentSymbol[]
+              >("vscode.executeDocumentSymbolProvider", def.uri);
+
+              if (defSymbols) {
+                const targetSymbol = this.findSymbolAtPosition(
+                  defSymbols,
+                  def.range.start
+                );
+
+                if (targetSymbol && this.isFunctionOrMethod(targetSymbol)) {
+                  const targetType = this.getNodeType(targetSymbol.kind);
+                  const targetId = `${targetType}_${targetSymbol.name}`;
+
+                  const sourceType = this.getNodeType(symbol.kind);
+                  const sourceId = `${sourceType}_${symbol.name}`;
+
+                  if (targetId !== sourceId) {
+                    // ✅ Phát hiện xem return value có được sử dụng không
+                    const usesReturnValue = this.detectReturnValueUsage(
+                      line,
+                      charIndex,
+                      functionName
+                    );
+
+                    callees.push({ target: targetId, usesReturnValue });
+                  }
+                }
+              }
+            } else {
+              Logger.error(
+                `External call detected: ${functionName} (in ${def.uri.fsPath})`
+              );
+            }
+          }
+        } catch (error) {
+          Logger.error(`Could not resolve definition for: ${functionName}`);
+        }
+      }
+    }
+
+    return callees;
   }
 
   private findParentSymbol(
@@ -236,6 +481,10 @@ export class GoParser {
           symbol
         );
 
+        Logger.debug(
+          `[GoParser] Processing ${currentNode.id}: found ${callees.length} callees`
+        );
+
         for (const callee of callees) {
           // Thêm edge
           if (!edgeMap.has(currentNode.id)) {
@@ -243,10 +492,19 @@ export class GoParser {
           }
 
           if (!edgeMap.get(currentNode.id)!.has(callee.targetId)) {
+            // ✅ LOG & ADD hasReturnValue
+            Logger.debug(
+              `[GoParser] Edge: ${currentNode.id} → ${callee.targetId}`
+            );
+            Logger.debug(
+              `[GoParser] → usesReturnValue: ${callee.usesReturnValue}`
+            );
+
             allEdges.push({
               source: currentNode.id,
               target: callee.targetId,
               type: "calls",
+              hasReturnValue: callee.usesReturnValue, // ✅ PHẢI CÓ
             });
             edgeMap.get(currentNode.id)!.add(callee.targetId);
           }
@@ -291,6 +549,7 @@ export class GoParser {
       targetSymbol: vscode.DocumentSymbol;
       targetDocument: vscode.TextDocument;
       crossFile: boolean;
+      usesReturnValue: boolean; // ✅ THÊM FIELD NÀY
     }>
   > {
     const callees: Array<{
@@ -298,6 +557,7 @@ export class GoParser {
       targetSymbol: vscode.DocumentSymbol;
       targetDocument: vscode.TextDocument;
       crossFile: boolean;
+      usesReturnValue: boolean;
     }> = [];
 
     const text = document.getText(symbol.range);
@@ -358,11 +618,23 @@ export class GoParser {
                   const sourceId = `${sourceType}_${symbol.name}`;
 
                   if (targetId !== sourceId) {
+                    // ✅ DETECT RETURN VALUE USAGE
+                    const usesReturnValue = this.detectReturnValueUsage(
+                      line,
+                      charIndex,
+                      functionName
+                    );
+
+                    Logger.debug(
+                      `[GoParser] Call: ${functionName} → usesReturnValue: ${usesReturnValue}`
+                    );
+
                     callees.push({
                       targetId,
                       targetSymbol,
                       targetDocument: defDocument,
                       crossFile: isCrossFile,
+                      usesReturnValue, // ✅ THÊM VÀO ĐÂY
                     });
                   }
                 }
