@@ -304,12 +304,17 @@ export class GoParser {
                   const targetType = this.getNodeType(targetSymbol.kind);
                   const targetId = `${targetType}_${targetSymbol.name}`;
 
-                  callees.push({
-                    targetId,
-                    targetSymbol,
-                    targetDocument: defDocument,
-                    crossFile: isCrossFile,
-                  });
+                  const sourceType = this.getNodeType(symbol.kind);
+                  const sourceId = `${sourceType}_${symbol.name}`;
+
+                  if (targetId !== sourceId) {
+                    callees.push({
+                      targetId,
+                      targetSymbol,
+                      targetDocument: defDocument,
+                      crossFile: isCrossFile,
+                    });
+                  }
                 }
               }
             } catch (error) {
@@ -426,7 +431,10 @@ export class GoParser {
                 const targetType = this.getNodeType(targetSymbol.kind);
                 const targetId = `${targetType}_${targetSymbol.name}`;
 
-                if (nodeMap.has(targetId)) {
+                const sourceType = this.getNodeType(symbol.kind);
+                const sourceId = `${sourceType}_${symbol.name}`;
+
+                if (nodeMap.has(targetId) && targetId !== sourceId) {
                   callees.push({ target: targetId, crossFile: isCrossFile });
                 }
               }
@@ -523,6 +531,10 @@ export class GoParser {
     const functionCallRegex = /\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
 
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      if (lineIndex === 0) {
+        continue;
+      }
+
       const line = lines[lineIndex];
       let match;
 
@@ -556,7 +568,12 @@ export class GoParser {
                   const targetType = this.getNodeType(targetSymbol.kind);
                   const targetId = `${targetType}_${targetSymbol.name}`;
 
-                  callees.push({ target: targetId });
+                  const sourceType = this.getNodeType(symbol.kind);
+                  const sourceId = `${sourceType}_${symbol.name}`;
+
+                  if (targetId !== sourceId) {
+                    callees.push({ target: targetId });
+                  }
                 }
               }
             } else {
@@ -713,8 +730,10 @@ export class GoParser {
                   const targetType = this.getNodeType(targetSymbol.kind);
                   const targetId = `${targetType}_${targetSymbol.name}`;
 
-                  // Chỉ thêm edge nếu target node tồn tại trong nodeMap
-                  if (nodeMap.has(targetId)) {
+                  const sourceType = this.getNodeType(symbol.kind);
+                  const sourceId = `${sourceType}_${symbol.name}`;
+
+                  if (nodeMap.has(targetId) && targetId !== sourceId) {
                     callees.push({ target: targetId, crossFile: isCrossFile });
                   }
                 }
