@@ -30,7 +30,7 @@ function groupNodesByFile(nodes: Node[], edges: Edge[]): FileGroup[] {
 
   // Group code nodes by file
   nodes.forEach((node) => {
-    if (node.type === "codeEntityNode") {
+    if (node.type === "functionNode") {
       const file = (node.data as any).file;
       if (!nodesByFile.has(file)) {
         nodesByFile.set(file, []);

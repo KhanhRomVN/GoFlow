@@ -13,7 +13,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import "../styles/common.css";
 import "../styles/flow-graph.css";
-import CodeEntityNode from "./CodeEntityNode";
+import FunctionNode from "./FunctionNode";
 import FileGroupContainer from "./FileGroupContainer";
 import { GraphData } from "../../models/Node";
 import { detectFramework, FrameworkConfig } from "../configs/layoutStrategies";
@@ -24,7 +24,7 @@ import NodeVisibilityDrawer from "./NodeVisibilityDrawer";
 import FlowPathDrawer from "./FlowPathDrawer";
 import { FlowPathTracker, FlowPath } from "../utils/FlowPathTracker";
 
-interface CodeEntityNodeData extends Record<string, unknown> {
+interface FunctionNodeData extends Record<string, unknown> {
   id: string;
   label: string;
   type: "function" | "method";
@@ -41,7 +41,7 @@ interface CodeEntityNodeData extends Record<string, unknown> {
   lineHighlightedEdges?: Set<string>;
 }
 
-type FlowNode = Node<CodeEntityNodeData>;
+type FlowNode = Node<FunctionNodeData>;
 type FlowEdge = Edge;
 
 interface FlowGraphProps {
@@ -49,7 +49,7 @@ interface FlowGraphProps {
 }
 
 const nodeTypes = {
-  codeEntityNode: CodeEntityNode as React.ComponentType<any>,
+  functionNode: FunctionNode as React.ComponentType<any>,
   fileGroupContainer: FileGroupContainer as React.ComponentType<any>,
 };
 
@@ -204,7 +204,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
 
   const handleHideAllNodes = useCallback(() => {
     const allNodeIds = nodes
-      .filter((n) => n.type === "codeEntityNode")
+      .filter((n) => n.type === "functionNode")
       .map((n) => n.id);
     setHiddenNodeIds(new Set(allNodeIds));
   }, [nodes]);
@@ -335,13 +335,13 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
       setHighlightedNodeId(targetNodeId);
 
       const allNodesData = nodes
-        .filter((n) => n.type === "codeEntityNode")
+        .filter((n) => n.type === "functionNode")
         .map((n) => ({
           id: n.id,
-          label: (n.data as CodeEntityNodeData).label,
-          type: (n.data as CodeEntityNodeData).type,
-          file: (n.data as CodeEntityNodeData).file,
-          line: (n.data as CodeEntityNodeData).line,
+          label: (n.data as FunctionNodeData).label,
+          type: (n.data as FunctionNodeData).type,
+          file: (n.data as FunctionNodeData).file,
+          line: (n.data as FunctionNodeData).line,
         }));
 
       const tracedPath = EdgeTracker.tracePathsToRoot(
@@ -536,8 +536,8 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
       const nodesByFile = new Map<string, FlowNode[]>();
 
       nodes.forEach((node) => {
-        if (node.type === "codeEntityNode") {
-          const file = (node.data as CodeEntityNodeData).file;
+        if (node.type === "functionNode") {
+          const file = (node.data as FunctionNodeData).file;
           if (!nodesByFile.has(file)) {
             nodesByFile.set(file, []);
           }
@@ -634,7 +634,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         if (node.type === "function" || node.type === "method") {
           flowNodes.push({
             id: node.id,
-            type: "codeEntityNode" as const,
+            type: "functionNode" as const,
             position: { x: 0, y: 0 },
             data: {
               id: node.id,
@@ -651,7 +651,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               onClearNodeHighlight: handleClearNodeHighlight,
               allNodes: data.nodes,
               lineHighlightedEdges: lineHighlightedEdges,
-            } as CodeEntityNodeData,
+            } as FunctionNodeData,
             style: {
               width: 650,
               height: 320,
@@ -776,13 +776,13 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
 
         // Generate flow paths
         const codeNodes = layoutedNodes
-          .filter((n) => n.type === "codeEntityNode")
+          .filter((n) => n.type === "functionNode")
           .map((n) => ({
             id: n.id,
-            label: (n.data as CodeEntityNodeData).label,
-            type: (n.data as CodeEntityNodeData).type,
-            file: (n.data as CodeEntityNodeData).file,
-            line: (n.data as CodeEntityNodeData).line,
+            label: (n.data as FunctionNodeData).label,
+            type: (n.data as FunctionNodeData).type,
+            file: (n.data as FunctionNodeData).file,
+            line: (n.data as FunctionNodeData).line,
           }));
 
         FlowPathTracker.generateFlowsFromGraph(codeNodes, layoutedEdges);
@@ -810,8 +810,8 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
 
   const onNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
-      if (enableJumpToFile && node.type === "codeEntityNode") {
-        const data = node.data as CodeEntityNodeData;
+      if (enableJumpToFile && node.type === "functionNode") {
+        const data = node.data as FunctionNodeData;
         vscode.postMessage({
           command: "jumpToDefinition",
           file: data.file,
@@ -828,7 +828,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     setIsAutoSorting(true);
 
     try {
-      const codeNodes = nodes.filter((n) => n.type === "codeEntityNode");
+      const codeNodes = nodes.filter((n) => n.type === "functionNode");
       const { nodes: layoutedNodes, edges: layoutedEdges } =
         await getLayoutedElements(codeNodes, edges, detectedFramework);
 
@@ -865,7 +865,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
   // Fixed useEffect for container calculation - prevent infinite loop
   useEffect(() => {
     const codeNodes = debouncedNodes.filter(
-      (n: { type: string }) => n.type === "codeEntityNode"
+      (n: { type: string }) => n.type === "functionNode"
     );
     const currentContainers = debouncedNodes.filter(
       (n: { type: string }) => n.type === "fileGroupContainer"
@@ -1001,7 +1001,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
       ) : (
         <ReactFlow
           nodes={nodes.filter((n) => {
-            if (n.type === "codeEntityNode") {
+            if (n.type === "functionNode") {
               return !hiddenNodeIds.has(n.id);
             }
 
@@ -1010,8 +1010,8 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               const containerFile = (n.data as any).fileName;
               const visibleNodesInContainer = nodes.filter(
                 (node) =>
-                  node.type === "codeEntityNode" &&
-                  (node.data as CodeEntityNodeData).file === containerFile &&
+                  node.type === "functionNode" &&
+                  (node.data as FunctionNodeData).file === containerFile &&
                   !hiddenNodeIds.has(node.id)
               );
               return visibleNodesInContainer.length > 0;
@@ -1137,13 +1137,13 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
         nodes={nodes
-          .filter((n) => n.type === "codeEntityNode")
+          .filter((n) => n.type === "functionNode")
           .map((n) => ({
             id: n.id,
-            label: (n.data as CodeEntityNodeData).label,
-            type: (n.data as CodeEntityNodeData).type,
-            file: (n.data as CodeEntityNodeData).file,
-            line: (n.data as CodeEntityNodeData).line,
+            label: (n.data as FunctionNodeData).label,
+            type: (n.data as FunctionNodeData).type,
+            file: (n.data as FunctionNodeData).file,
+            line: (n.data as FunctionNodeData).line,
           }))}
         hiddenNodeIds={hiddenNodeIds}
         onToggleNode={handleToggleNodeVisibility}

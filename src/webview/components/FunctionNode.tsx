@@ -105,7 +105,7 @@ const LANGUAGE_BADGES: Record<string, Record<string, string>> = {
   },
 };
 
-interface CodeEntityNodeData extends Record<string, unknown> {
+interface FunctionNodeData extends Record<string, unknown> {
   id: string;
   label: string;
   type: "function" | "method";
@@ -122,11 +122,11 @@ interface CodeEntityNodeData extends Record<string, unknown> {
   lineHighlightedEdges?: Set<string>;
 }
 
-const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
+const FunctionNode: React.FC<NodeProps> = ({ data, selected }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [isNodeHighlighted, setIsNodeHighlighted] = useState(false);
-  const nodeData = data as CodeEntityNodeData;
+  const nodeData = data as FunctionNodeData;
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const lineHighlightedEdges = nodeData.lineHighlightedEdges || new Set();
@@ -155,7 +155,7 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
 
       saveTimeoutRef.current = setTimeout(async () => {
         if (!nodeData.vscode) {
-          console.error("[CodeEntityNode] VSCode API not available");
+          console.error("[FunctionNode] VSCode API not available");
           return;
         }
 
@@ -175,7 +175,7 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
             setIsSaving(false);
           }, 1000);
         } catch (error) {
-          console.error("[CodeEntityNode] Failed to auto-save:", error);
+          console.error("[FunctionNode] Failed to auto-save:", error);
           setIsSaving(false);
         }
       }, 1500);
@@ -212,7 +212,7 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
         setIsNodeHighlighted(true);
       } else {
         Logger.warn(
-          `[CodeEntityNode] onNodeHighlight is not a function for: ${nodeData.id}`
+          `[FunctionNode] onNodeHighlight is not a function for: ${nodeData.id}`
         );
       }
     },
@@ -271,7 +271,7 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
         } ${isNodeHighlighted ? "node-highlighted" : ""} ${
           lineHighlightedEdges.size > 0 ? "line-highlighted" : ""
         }`}
-        data-type="codeEntityNode"
+        data-type="functionNode"
         onClick={handleNodeClick}
       >
         <Handle
@@ -415,4 +415,4 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
   );
 };
 
-export default memo(CodeEntityNode);
+export default memo(FunctionNode);
