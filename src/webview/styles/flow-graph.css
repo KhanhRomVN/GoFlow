@@ -1,5 +1,6 @@
 /* src/webview/styles/flow-graph.css */
 @import './node-visibility-drawer.css';
+@import './flow-path-drawer.css';
 
 .flow-graph-container {
   width: 100vw;
