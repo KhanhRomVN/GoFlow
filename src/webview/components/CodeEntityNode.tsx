@@ -103,6 +103,7 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
 
   const handleLineClick = useCallback(
     (lineNumber: number, lineContent: string) => {
+      // Step 1: Resolve definition at clicked line (yellow line)
       if (nodeData.vscode && nodeData.onHighlightEdge) {
         nodeData.vscode.postMessage({
           command: "resolveDefinitionAtLine",
@@ -111,10 +112,11 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
           relativeLine: lineNumber,
           lineContent: lineContent,
           nodeId: nodeData.id,
-          shouldTracePath: true,
+          shouldTracePath: false, // Không trace path ở đây
         });
       }
 
+      // Step 2: Highlight parent nodes (red lines)
       if (typeof nodeData.onNodeHighlight === "function") {
         nodeData.onNodeHighlight(nodeData.id);
         setIsNodeHighlighted(true);
