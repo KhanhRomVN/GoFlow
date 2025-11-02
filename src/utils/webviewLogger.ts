@@ -75,4 +75,9 @@ export class Logger {
     this.logLevel = level;
     this.info(`Log level changed to ${LogLevel[level]}`);
   }
+
+  // Helper to get current log level
+  static getLogLevel(): LogLevel {
+    return this.logLevel;
+  }
 }

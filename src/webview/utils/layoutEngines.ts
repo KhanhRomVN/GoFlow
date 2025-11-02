@@ -64,7 +64,7 @@ function getCrossFileEdges(groups: FileGroup[], allEdges: Edge[]): Edge[] {
     group.nodes.forEach((node) => allNodeIds.add(node.id));
   });
 
-  return allEdges.filter((edge) => {
+  const crossFileEdges = allEdges.filter((edge) => {
     const sourceGroup = groups.find((g) =>
       g.nodes.some((n) => n.id === edge.source)
     );
@@ -78,6 +78,8 @@ function getCrossFileEdges(groups: FileGroup[], allEdges: Edge[]): Edge[] {
       sourceGroup.fileName !== targetGroup.fileName
     );
   });
+
+  return crossFileEdges;
 }
 
 // ==================== DAGRE ====================
@@ -112,7 +114,7 @@ function layoutGroupWithDagre(
 
   dagre.layout(dagreGraph);
 
-  return nodes.map((node) => {
+  const layoutedNodes = nodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
     return {
       ...node,
@@ -122,6 +124,8 @@ function layoutGroupWithDagre(
       },
     };
   });
+
+  return layoutedNodes;
 }
 
 export function layoutWithDagre(
@@ -270,7 +274,7 @@ async function layoutGroupWithELK(
 
   const layoutedGraph = await elk.layout(graph);
 
-  return nodes.map((node) => {
+  const layoutedNodes = nodes.map((node) => {
     const elkNode = layoutedGraph.children?.find((n) => n.id === node.id);
     return {
       ...node,
@@ -280,6 +284,8 @@ async function layoutGroupWithELK(
       },
     };
   });
+
+  return layoutedNodes;
 }
 
 export async function layoutWithELK(
@@ -572,16 +578,25 @@ export async function applyLayout(
     },
   }));
 
+  let result;
   switch (strategy.algorithm) {
     case "dagre":
-      return layoutWithDagre(nodes, styledEdges, strategy);
+      result = layoutWithDagre(nodes, styledEdges, strategy);
+      break;
     case "elk-layered":
     case "elk-force":
     case "elk-box":
-      return await layoutWithELK(nodes, styledEdges, strategy);
+      result = await layoutWithELK(nodes, styledEdges, strategy);
+      break;
     case "d3-force":
-      return layoutWithD3Force(nodes, styledEdges, strategy);
+      result = layoutWithD3Force(nodes, styledEdges, strategy);
+      break;
     default:
-      return { nodes, edges: styledEdges };
+      console.warn(
+        `❓ [LayoutEngine] Unknown algorithm: ${strategy.algorithm}, using default`
+      );
+      result = { nodes, edges: styledEdges };
   }
+
+  return result;
 }

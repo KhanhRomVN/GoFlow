@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import {
   ReactFlow,
   Background,
@@ -47,6 +47,7 @@ interface CodeEntityNodeData extends Record<string, unknown> {
   onNodeHighlight?: (nodeId: string) => void;
   onClearNodeHighlight?: () => void;
   allNodes?: any[];
+  lineHighlightedEdges?: Set<string>;
 }
 
 type FlowNode = Node<CodeEntityNodeData>;
@@ -59,6 +60,23 @@ interface FlowGraphProps {
 const nodeTypes = {
   codeEntityNode: CodeEntityNode as React.ComponentType<any>,
   fileGroupContainer: FileGroupContainer as React.ComponentType<any>,
+};
+
+// Custom debounce hook
+const useDebounce = (value: any, delay: number) => {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
 };
 
 const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
@@ -77,6 +95,13 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
   const [nodeHighlightedEdges, setNodeHighlightedEdges] = useState<Set<string>>(
     new Set()
   );
+  const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(
+    null
+  );
+
+  // Use debounce for nodes to prevent excessive re-renders
+  const debouncedNodes = useDebounce(nodes, 100);
+  const lastContainerUpdateRef = useRef<string>("");
 
   const handleHighlightEdge = useCallback(
     (sourceNodeId: string, targetNodeId: string) => {
@@ -87,6 +112,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         return currentEdges.map((edge) => {
           const currentEdgeKey = `${edge.source}->${edge.target}`;
           const isLineHighlighted = currentEdgeKey === edgeKey;
+          const isNodeHighlighted = nodeHighlightedEdges.has(currentEdgeKey);
 
           if (isLineHighlighted) {
             return {
@@ -101,7 +127,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             };
           }
 
-          const isNodeHighlighted = nodeHighlightedEdges.has(currentEdgeKey);
           if (isNodeHighlighted) {
             return {
               ...edge,
@@ -176,11 +201,13 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
       );
 
       setNodeHighlightedEdges(edgeKeys);
+      setHighlightedNodeId(targetNodeId);
 
       setEdges((currentEdges) => {
         return currentEdges.map((edge) => {
           const currentEdgeKey = `${edge.source}->${edge.target}`;
           const isLineHighlighted = lineHighlightedEdges.has(currentEdgeKey);
+          const isNodeHighlighted = edgeKeys.has(currentEdgeKey);
 
           if (isLineHighlighted) {
             return {
@@ -195,7 +222,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             };
           }
 
-          const isNodeHighlighted = edgeKeys.has(currentEdgeKey);
           if (isNodeHighlighted) {
             return {
               ...edge,
@@ -222,15 +248,45 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         });
       });
 
-      Logger.info(
-        `[FlowGraph] Node highlight: ${incomingEdges.length} parent edges found for node ${targetNodeId}`
-      );
+      setNodes((currentNodes) => {
+        return currentNodes.map((node) => {
+          const isParentNode = incomingEdges.some(
+            (edge) => edge.source === node.id
+          );
+          const isTargetNode = node.id === targetNodeId;
+
+          if (isParentNode || isTargetNode) {
+            return {
+              ...node,
+              style: {
+                ...node.style,
+                border: isTargetNode
+                  ? "3px solid #FF6B6B"
+                  : "2px solid #FFA500",
+                boxShadow: isTargetNode
+                  ? "0 0 10px rgba(255, 107, 107, 0.5)"
+                  : "0 0 8px rgba(255, 165, 0, 0.4)",
+              },
+            };
+          }
+
+          return {
+            ...node,
+            style: {
+              ...node.style,
+              border: undefined,
+              boxShadow: undefined,
+            },
+          };
+        });
+      });
     },
-    [edges, setEdges, lineHighlightedEdges]
+    [edges, setEdges, lineHighlightedEdges, setNodes]
   );
 
   const handleClearNodeHighlight = useCallback(() => {
     setNodeHighlightedEdges(new Set());
+    setHighlightedNodeId(null);
 
     setEdges((currentEdges) => {
       return currentEdges.map((edge) => {
@@ -262,14 +318,24 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         };
       });
     });
-  }, [setEdges, lineHighlightedEdges]);
+
+    setNodes((currentNodes) => {
+      return currentNodes.map((node) => ({
+        ...node,
+        style: {
+          ...node.style,
+          border: undefined,
+          boxShadow: undefined,
+        },
+      }));
+    });
+  }, [setEdges, lineHighlightedEdges, setNodes]);
 
   const calculateFileGroupContainers = useCallback(
     (nodes: FlowNode[]): FlowNode[] => {
       const containerNodes: FlowNode[] = [];
       const nodesByFile = new Map<string, FlowNode[]>();
 
-      // Group nodes by file
       nodes.forEach((node) => {
         if (node.type === "codeEntityNode") {
           const file = (node.data as CodeEntityNodeData).file;
@@ -280,11 +346,9 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         }
       });
 
-      // Create container for each file group
       nodesByFile.forEach((fileNodes, file) => {
         if (fileNodes.length === 0) return;
 
-        // Calculate bounding box
         const padding = 40;
         let minX = Infinity;
         let minY = Infinity;
@@ -303,7 +367,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           maxY = Math.max(maxY, y + (nodeHeight as number));
         });
 
-        // Create container node
         const containerWidth = maxX - minX + padding * 2;
         const containerHeight = maxY - minY + padding * 2;
 
@@ -331,6 +394,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           },
         } as FlowNode);
       });
+
       return containerNodes;
     },
     []
@@ -353,7 +417,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
 
       const layoutedResult = await applyLayout(nodes, edges, strategy);
 
-      // Calculate and add file group containers
       const layoutedFlowNodes = layoutedResult.nodes as FlowNode[];
       const containerNodes = calculateFileGroupContainers(layoutedFlowNodes);
       const allNodes = [...containerNodes, ...layoutedFlowNodes];
@@ -387,6 +450,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               onNodeHighlight: handleNodeHighlight,
               onClearNodeHighlight: handleClearNodeHighlight,
               allNodes: data.nodes,
+              lineHighlightedEdges: lineHighlightedEdges,
             } as CodeEntityNodeData,
             style: {
               width: 650,
@@ -422,13 +486,19 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
 
       return { nodes: flowNodes, edges: flowEdges };
     },
-    [vscode, handleHighlightEdge, handleClearHighlight]
+    [
+      vscode,
+      handleHighlightEdge,
+      handleClearHighlight,
+      handleNodeHighlight,
+      handleClearNodeHighlight,
+      lineHighlightedEdges,
+    ]
   );
 
   const renderGraph = useCallback(
     async (data: GraphData, fileName?: string) => {
       try {
-        // Auto-detect framework
         if (fileName) {
           setCurrentFileName(fileName);
           const firstNode = data.nodes[0];
@@ -438,6 +508,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         }
 
         const { nodes: flowNodes, edges: flowEdges } = convertToFlowData(data);
+
         const { nodes: layoutedNodes, edges: layoutedEdges } =
           await getLayoutedElements(flowNodes, flowEdges, detectedFramework);
 
@@ -446,7 +517,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         setIsLoading(false);
         setError(null);
       } catch (err) {
-        console.error("[FlowGraph] Failed to render graph:", err);
+        console.error("❌ [FlowGraph] Failed to render graph:", err);
         setError(err instanceof Error ? err.message : "Unknown error");
         setIsLoading(false);
       }
@@ -514,83 +585,72 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     });
   }, [vscode]);
 
-  // Auto-update containers when nodes move
+  // Fixed useEffect for container calculation - prevent infinite loop
   useEffect(() => {
-    const codeNodes = nodes.filter((n) => n.type === "codeEntityNode");
+    const codeNodes = debouncedNodes.filter(
+      (n: { type: string }) => n.type === "codeEntityNode"
+    );
+    const currentContainers = debouncedNodes.filter(
+      (n: { type: string }) => n.type === "fileGroupContainer"
+    );
+
     if (codeNodes.length === 0) {
       return;
     }
 
-    // Chỉ update khi không có container hoặc số lượng code nodes thay đổi
-    const currentContainers = nodes.filter(
-      (n) => n.type === "fileGroupContainer"
-    );
+    const containerNodes = calculateFileGroupContainers(codeNodes);
 
-    if (currentContainers.length > 0 && codeNodes.length > 0) {
-      // Đã có containers, chỉ cần update khi position thay đổi
-      const containerNodes = calculateFileGroupContainers(codeNodes);
+    // Create a signature for current state to prevent unnecessary updates
+    const currentSignature = JSON.stringify({
+      codeNodeCount: codeNodes.length,
+      containerCount: currentContainers.length,
+      containerPositions: currentContainers.map(
+        (c: { id: any; position: { x: any; y: any } }) => ({
+          id: c.id,
+          x: c.position.x,
+          y: c.position.y,
+        })
+      ),
+    });
 
-      // So sánh với containers hiện tại
-      const needsUpdate = containerNodes.some((newContainer) => {
-        const oldContainer = currentContainers.find(
-          (c) => c.id === newContainer.id
-        );
-        if (!oldContainer) {
-          return true;
-        }
+    const newSignature = JSON.stringify({
+      codeNodeCount: codeNodes.length,
+      containerCount: containerNodes.length,
+      containerPositions: containerNodes.map((c) => ({
+        id: c.id,
+        x: c.position.x,
+        y: c.position.y,
+      })),
+    });
 
-        const posXDiff = Math.abs(
-          oldContainer.position.x - newContainer.position.x
-        );
-        const posYDiff = Math.abs(
-          oldContainer.position.y - newContainer.position.y
-        );
-        const widthDiff = Math.abs(
-          ((oldContainer.style?.width as number) || 0) -
-            ((newContainer.style?.width as number) || 0)
-        );
-        const heightDiff = Math.abs(
-          ((oldContainer.style?.height as number) || 0) -
-            ((newContainer.style?.height as number) || 0)
-        );
-
-        const hasChanged =
-          posXDiff > 1 || posYDiff > 1 || widthDiff > 1 || heightDiff > 1;
-
-        return hasChanged;
-      });
-
-      if (!needsUpdate) {
-        return;
-      }
-
-      setNodes((currentNodes) => {
-        const withoutContainers = currentNodes.filter(
-          (n) => n.type !== "fileGroupContainer"
-        );
-        const updatedNodes = [...containerNodes, ...withoutContainers];
-
-        return updatedNodes;
-      });
-    } else if (currentContainers.length === 0 && codeNodes.length > 0) {
-      // Chưa có containers, tạo mới
-      const containerNodes = calculateFileGroupContainers(codeNodes);
-
-      setNodes((currentNodes) => {
-        const withoutContainers = currentNodes.filter(
-          (n) => n.type !== "fileGroupContainer"
-        );
-        const updatedNodes = [...containerNodes, ...withoutContainers];
-
-        return updatedNodes;
-      });
+    // Only update if signatures are different
+    if (
+      currentSignature === newSignature &&
+      currentSignature === lastContainerUpdateRef.current
+    ) {
+      return;
     }
-  }, [nodes, calculateFileGroupContainers, setNodes]);
 
+    lastContainerUpdateRef.current = newSignature;
+
+    setNodes((currentNodes) => {
+      const withoutContainers = currentNodes.filter(
+        (n) => n.type !== "fileGroupContainer"
+      );
+      const updatedNodes = [...containerNodes, ...withoutContainers];
+      return updatedNodes;
+    });
+  }, [debouncedNodes, calculateFileGroupContainers, setNodes]);
+
+  // useEffect CHỈ GỬI "ready" MỘT LẦN khi component mount
+  useEffect(() => {
+    vscode.postMessage({ command: "ready" });
+  }, []); // ← KHÔNG CÓ DEPENDENCIES - chỉ chạy 1 lần
+
+  // useEffect riêng để xử lý message listener
   useEffect(() => {
     const messageHandler = async (event: MessageEvent) => {
       const message = event.data;
-
       try {
         switch (message.command) {
           case "renderGraph":
@@ -614,7 +674,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             handleClearHighlight();
             break;
           default:
-            Logger.info("[FlowGraph] Unknown command:", message.command);
+            console.log("❓ [FlowGraph] Unknown command:", message.command);
         }
       } catch (err) {
         console.error("[FlowGraph] Error handling message:", err);
@@ -624,12 +684,11 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     };
 
     window.addEventListener("message", messageHandler);
-    vscode.postMessage({ command: "ready" });
 
     return () => {
       window.removeEventListener("message", messageHandler);
     };
-  }, [renderGraph, vscode, handleHighlightEdge, handleClearHighlight]);
+  }, [renderGraph, handleHighlightEdge, handleClearHighlight]);
 
   return (
     <div style={{ width: "100vw", height: "100vh" }}>

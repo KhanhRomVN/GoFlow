@@ -1,11 +1,4 @@
-import React, {
-  memo,
-  useState,
-  useMemo,
-  useCallback,
-  useRef,
-  useEffect,
-} from "react";
+import React, { memo, useState, useCallback, useRef, useEffect } from "react";
 import { Handle, Position, NodeProps, NodeResizer } from "@xyflow/react";
 import MonacoCodeEditor from "./MonacoCodeEditor";
 import "../styles/code-entity-node.css";
@@ -36,6 +29,7 @@ interface CodeEntityNodeData extends Record<string, unknown> {
   onNodeHighlight?: (nodeId: string) => void;
   onClearNodeHighlight?: () => void;
   allNodes?: any[];
+  lineHighlightedEdges?: Set<string>;
 }
 
 const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
@@ -44,6 +38,8 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
   const [isNodeHighlighted, setIsNodeHighlighted] = useState(false);
   const nodeData = data as CodeEntityNodeData;
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const lineHighlightedEdges = nodeData.lineHighlightedEdges || new Set();
 
   const getRelativePath = (fullPath: string): string => {
     const parts = fullPath.split(/[/\\]/);
@@ -63,12 +59,10 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
 
   const handleCodeChange = useCallback(
     (value: string) => {
-      // Clear previous timeout
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
 
-      // Debounce auto-save after 1.5 seconds
       saveTimeoutRef.current = setTimeout(async () => {
         if (!nodeData.vscode) {
           console.error("[CodeEntityNode] VSCode API not available");
@@ -87,7 +81,6 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
             nodeId: nodeData.id,
           });
 
-          // Reset saving indicator after 1 second
           setTimeout(() => {
             setIsSaving(false);
           }, 1000);
@@ -100,7 +93,6 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
     [nodeData]
   );
 
-  // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
       if (saveTimeoutRef.current) {
@@ -111,13 +103,12 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
 
   const handleLineClick = useCallback(
     (lineNumber: number, lineContent: string) => {
-      // Gửi request lên backend để VSCode API resolve definition
       if (nodeData.vscode && nodeData.onHighlightEdge) {
         nodeData.vscode.postMessage({
           command: "resolveDefinitionAtLine",
           file: nodeData.file,
-          line: nodeData.line, // Line number bắt đầu của function
-          relativeLine: lineNumber, // Line number trong editor (relative)
+          line: nodeData.line,
+          relativeLine: lineNumber,
           lineContent: lineContent,
           nodeId: nodeData.id,
         });
@@ -128,11 +119,24 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
 
   const handleNodeClick = useCallback(
     (e: React.MouseEvent) => {
-      // Chỉ trigger khi click vào container, không phải Monaco editor
       if ((e.target as HTMLElement).closest(".monaco-editor")) {
         return;
       }
 
+      // Nếu đang có line highlight (từ click dòng code), giữ nguyên và thêm node highlight
+      if (lineHighlightedEdges.size > 0) {
+        // Vẫn cho phép toggle node highlight khi có line highlight
+        if (isNodeHighlighted) {
+          nodeData.onClearNodeHighlight?.();
+          setIsNodeHighlighted(false);
+        } else {
+          nodeData.onNodeHighlight?.(nodeData.id);
+          setIsNodeHighlighted(true);
+        }
+        return;
+      }
+
+      // Trường hợp thông thường (không có line highlight)
       if (
         typeof nodeData.onNodeHighlight === "function" &&
         typeof nodeData.onClearNodeHighlight === "function"
@@ -140,34 +144,25 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
         if (isNodeHighlighted) {
           nodeData.onClearNodeHighlight();
           setIsNodeHighlighted(false);
-          Logger.info(
-            `[CodeEntityNode] Cleared parent highlight for node: ${nodeData.id}`
-          );
         } else {
           nodeData.onNodeHighlight(nodeData.id);
           setIsNodeHighlighted(true);
-          Logger.info(
-            `[CodeEntityNode] Showing parent nodes for: ${nodeData.id}`
-          );
         }
       }
     },
-    [nodeData, isNodeHighlighted]
+    [nodeData, isNodeHighlighted, lineHighlightedEdges.size]
   );
 
-  // Clear node highlight khi component unmount hoặc deselected
   useEffect(() => {
-    if (!selected && isNodeHighlighted) {
-      if (typeof nodeData.onClearNodeHighlight === "function") {
-        nodeData.onClearNodeHighlight();
-      }
-      setIsNodeHighlighted(false);
+    if (lineHighlightedEdges.size > 0 && isNodeHighlighted) {
+      Logger.debug(
+        `[CodeEntityNode] Line highlight active, keeping node highlight for: ${nodeData.id}`
+      );
     }
-  }, [selected, isNodeHighlighted, nodeData]);
+  }, [lineHighlightedEdges.size, isNodeHighlighted, nodeData.id]);
 
   return (
     <>
-      {/* NodeResizer - Hiển thị khi node được select */}
       <NodeResizer
         color={nodeData.type === "function" ? "#10b981" : "#6366f1"}
         isVisible={selected}
@@ -193,11 +188,12 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
       <div
         className={`code-entity-node-container ${
           isResizing ? "resizing" : ""
-        } ${isNodeHighlighted ? "node-highlighted" : ""}`}
+        } ${isNodeHighlighted ? "node-highlighted" : ""} ${
+          lineHighlightedEdges.size > 0 ? "line-highlighted" : ""
+        }`}
         data-type="codeEntityNode"
         onClick={handleNodeClick}
       >
-        {/* Center Handles Only */}
         <Handle
           type="target"
           position={Position.Top}
@@ -257,6 +253,11 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
           {isNodeHighlighted && (
             <span className="code-entity-node-parent-indicator">
               ⬆️ Parents
+            </span>
+          )}
+          {lineHighlightedEdges.size > 0 && (
+            <span className="code-entity-node-line-indicator">
+              🔗 Line Link
             </span>
           )}
           {isSaving && (

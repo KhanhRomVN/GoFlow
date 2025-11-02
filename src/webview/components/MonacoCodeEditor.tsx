@@ -22,6 +22,9 @@ interface MonacoCodeEditorProps {
   onLineClick?: (lineNumber: number, lineContent: string) => void;
 }
 
+// Biến toàn cục để theo dõi trạng thái khởi tạo
+let monacoInitialized = false;
+
 const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   value,
   onChange,
@@ -34,6 +37,12 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   const [isEditorReady, setIsEditorReady] = useState(false);
 
   useEffect(() => {
+    // Chỉ khởi tạo Monaco một lần duy nhất
+    if (monacoInitialized) {
+      setIsEditorReady(true);
+      return;
+    }
+
     // Configure Monaco to load from local media/vs folder
     try {
       loader.config({
@@ -48,7 +57,8 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       loader
         .init()
         .then(() => {
-          Logger.info("[MonacoCodeEditor] Monaco initialized successfully");
+          monacoInitialized = true;
+          setIsEditorReady(true);
         })
         .catch((err) => {
           console.error("[MonacoCodeEditor] Failed to initialize Monaco:", err);
@@ -60,8 +70,6 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   }, []);
 
   const handleEditorDidMount = (editor: any, monaco: any) => {
-    setIsEditorReady(true);
-
     // Listen to cursor position changes
     if (onLineClick) {
       editor.onDidChangeCursorPosition((e: any) => {
