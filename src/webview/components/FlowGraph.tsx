@@ -20,6 +20,7 @@ import { detectFramework, FrameworkConfig } from "../configs/layoutStrategies";
 import { applyLayout } from "../utils/layoutEngines";
 import { EdgeTracker, EdgeConnection } from "../utils/EdgeTracker";
 import { Logger } from "../../utils/webviewLogger";
+import NodeVisibilityDrawer from "./NodeVisibilityDrawer";
 
 interface CodeEntityNodeData extends Record<string, unknown> {
   id: string;
@@ -90,10 +91,63 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     string | null
   >(null);
   const [isGraphReady, setIsGraphReady] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [hiddenNodeIds, setHiddenNodeIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem("goflow-hidden-nodes");
+      return saved ? new Set<string>(JSON.parse(saved)) : new Set<string>();
+    } catch (error) {
+      console.error(
+        "[FlowGraph] Failed to load hidden nodes from localStorage:",
+        error
+      );
+      return new Set<string>();
+    }
+  });
+
+  // Auto-save hiddenNodeIds to localStorage
+  useEffect(() => {
+    try {
+      const array = Array.from(hiddenNodeIds);
+      localStorage.setItem("goflow-hidden-nodes", JSON.stringify(array));
+    } catch (error) {
+      console.error(
+        "[FlowGraph] Failed to save hidden nodes to localStorage:",
+        error
+      );
+    }
+  }, [hiddenNodeIds]);
 
   // Use debounce for nodes to prevent excessive re-renders
   const debouncedNodes = useDebounce(nodes, 100);
   const lastContainerUpdateRef = useRef<string>("");
+
+  const handleToggleDrawer = useCallback(() => {
+    setIsDrawerOpen((prev) => !prev);
+  }, []);
+
+  const handleToggleNodeVisibility = useCallback((nodeId: string) => {
+    setHiddenNodeIds((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(nodeId)) {
+        newSet.delete(nodeId);
+      } else {
+        newSet.add(nodeId);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const handleShowAllNodes = useCallback(() => {
+    setHiddenNodeIds(new Set());
+  }, []);
+
+  const handleHideAllNodes = useCallback(() => {
+    const allNodeIds = nodes
+      .filter((n) => n.type === "codeEntityNode")
+      .map((n) => n.id);
+    setHiddenNodeIds(new Set(allNodeIds));
+  }, [nodes]);
 
   const handleHighlightEdge = useCallback(
     (sourceNodeId: string, targetNodeId: string) => {
@@ -823,7 +877,25 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         </div>
       ) : (
         <ReactFlow
-          nodes={nodes}
+          nodes={nodes.filter((n) => {
+            if (n.type === "codeEntityNode") {
+              return !hiddenNodeIds.has(n.id);
+            }
+
+            // Filter FileGroupContainer: chỉ hiển thị nếu có ít nhất 1 node visible bên trong
+            if (n.type === "fileGroupContainer") {
+              const containerFile = (n.data as any).fileName;
+              const visibleNodesInContainer = nodes.filter(
+                (node) =>
+                  node.type === "codeEntityNode" &&
+                  (node.data as CodeEntityNodeData).file === containerFile &&
+                  !hiddenNodeIds.has(node.id)
+              );
+              return visibleNodesInContainer.length > 0;
+            }
+
+            return true;
+          })}
           edges={edges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
@@ -851,6 +923,13 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             pannable
           />
           <Panel position="top-right" className="flow-graph-panel">
+            <button
+              onClick={handleToggleDrawer}
+              className="flow-graph-button flow-graph-button-primary"
+              title="Node Visibility"
+            >
+              👁️
+            </button>
             <button
               onClick={() => setEnableJumpToFile(!enableJumpToFile)}
               className={`flow-graph-button ${
@@ -926,6 +1005,23 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           )}
         </ReactFlow>
       )}
+      <NodeVisibilityDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        nodes={nodes
+          .filter((n) => n.type === "codeEntityNode")
+          .map((n) => ({
+            id: n.id,
+            label: (n.data as CodeEntityNodeData).label,
+            type: (n.data as CodeEntityNodeData).type,
+            file: (n.data as CodeEntityNodeData).file,
+            line: (n.data as CodeEntityNodeData).line,
+          }))}
+        hiddenNodeIds={hiddenNodeIds}
+        onToggleNode={handleToggleNodeVisibility}
+        onShowAll={handleShowAllNodes}
+        onHideAll={handleHideAllNodes}
+      />
     </div>
   );
 };
