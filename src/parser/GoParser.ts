@@ -10,7 +10,7 @@ export class GoParser {
       const edges: Edge[] = [];
       const edgeMap = new Map<string, Set<string>>();
 
-      // === PASS 1: Tạo tất cả nodes trước (để có hasReturnValue) ===
+      // === PASS 1: Chỉ tạo FunctionNode (functions/methods) ===
       for (const symbol of symbols) {
         if (this.isFunctionOrMethod(symbol)) {
           // Bỏ qua nested functions
@@ -21,24 +21,18 @@ export class GoParser {
 
           const node = this.createNodeFromSymbol(symbol, document);
           nodes.push(node);
-        } else if (this.isTypeOrInterface(symbol)) {
-          const config = vscode.workspace.getConfiguration("goflow");
-          if (
-            (symbol.kind === vscode.SymbolKind.Struct &&
-              config.get("showTypes")) ||
-            (symbol.kind === vscode.SymbolKind.Interface &&
-              config.get("showInterfaces"))
-          ) {
-            nodes.push(this.createNodeFromSymbol(symbol, document));
-          }
         }
       }
+
+      // NOTE: DeclarationNodes sẽ được tạo động trong PASS 2 dựa trên usage
 
       // Tạo node map để lookup nhanh
       const nodeMap = new Map<string, Node>();
       nodes.forEach((node) => nodeMap.set(node.id, node));
 
-      // === PASS 2: Tạo edges với hasReturnValue chính xác ===
+      // === PASS 2: Tạo edges + DeclarationNodes động ===
+      const declarationUsageMap = new Map<string, Set<string>>(); // declarationId -> Set<functionId>
+
       for (const symbol of symbols) {
         if (this.isFunctionOrMethod(symbol)) {
           // Bỏ qua nested functions
@@ -51,6 +45,7 @@ export class GoParser {
           const cleanName = this.extractCleanFunctionName(symbol.name);
           const nodeId = `${nodeType}_${cleanName}`;
 
+          // Tìm function calls (edges thông thường)
           const callees = await this.findFunctionCallsWithReturnUsage(
             document,
             symbol,
@@ -73,8 +68,63 @@ export class GoParser {
               edgeMap.get(nodeId)!.add(callee.target);
             }
           }
+
+          // Tìm declaration usages
+          const declarations = await this.findDeclarationUsages(
+            document,
+            symbol,
+            symbols
+          );
+
+          for (const { declarationSymbol, usageCount } of declarations) {
+            const declType = this.getNodeType(declarationSymbol.kind);
+            const declId = `${declType}_${declarationSymbol.name}`;
+
+            // Track usage relationship
+            if (!declarationUsageMap.has(declId)) {
+              declarationUsageMap.set(declId, new Set());
+            }
+            declarationUsageMap.get(declId)!.add(nodeId);
+          }
         }
       }
+
+      // Tạo DeclarationNodes dựa trên usage (N copies nếu được N functions sử dụng)
+      let declarationIndex = 0;
+      declarationUsageMap.forEach((usedByFunctions, baseDeclarationId) => {
+        const declarationSymbol = symbols.find((s) => {
+          const type = this.getNodeType(s.kind);
+          const id = `${type}_${s.name}`;
+          return id === baseDeclarationId && this.isDeclaration(s);
+        });
+
+        if (!declarationSymbol) return;
+
+        // Tạo N DeclarationNodes (1 cho mỗi function sử dụng)
+        usedByFunctions.forEach((functionId) => {
+          const uniqueDeclarationId = `${baseDeclarationId}_usage_${declarationIndex++}`;
+
+          const declarationNode = this.createNodeFromSymbol(
+            declarationSymbol,
+            document
+          );
+
+          // Override ID và thêm metadata
+          declarationNode.id = uniqueDeclarationId;
+          (declarationNode as any).usedBy = [functionId];
+          (declarationNode as any).baseDeclarationId = baseDeclarationId;
+
+          nodes.push(declarationNode);
+          nodeMap.set(uniqueDeclarationId, declarationNode);
+
+          // Tạo edge: FunctionNode -> DeclarationNode
+          edges.push({
+            source: functionId,
+            target: uniqueDeclarationId,
+            type: "uses",
+          });
+        });
+      });
 
       const validNodeIds = new Set(nodes.map((n) => n.id));
       const validEdges = edges.filter((edge) => {
@@ -298,6 +348,63 @@ export class GoParser {
       }
     }
     return undefined;
+  }
+
+  private async findDeclarationUsages(
+    document: vscode.TextDocument,
+    symbol: vscode.DocumentSymbol,
+    allSymbols: vscode.DocumentSymbol[]
+  ): Promise<
+    Array<{ declarationSymbol: vscode.DocumentSymbol; usageCount: number }>
+  > {
+    const usages: Map<
+      string,
+      { symbol: vscode.DocumentSymbol; count: number }
+    > = new Map();
+
+    const text = document.getText(symbol.range);
+    const lines = text.split("\n");
+
+    // Pattern để detect type usage: var x Type, func() Type, Type{}, etc.
+    const typeUsageRegex = /\b([A-Z][a-zA-Z0-9_]*)\b/g;
+
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      const line = lines[lineIndex];
+      let match;
+
+      while ((match = typeUsageRegex.exec(line)) !== null) {
+        const typeName = match[1];
+
+        // Tìm declaration symbol với tên này
+        const declarationSymbol = allSymbols.find(
+          (s) => this.isDeclaration(s) && s.name === typeName
+        );
+
+        if (declarationSymbol) {
+          const key = `${declarationSymbol.kind}_${declarationSymbol.name}`;
+
+          if (!usages.has(key)) {
+            usages.set(key, { symbol: declarationSymbol, count: 0 });
+          }
+
+          usages.get(key)!.count++;
+        }
+      }
+    }
+
+    return Array.from(usages.values()).map((usage) => ({
+      declarationSymbol: usage.symbol,
+      usageCount: usage.count,
+    }));
+  }
+
+  private isDeclaration(symbol: vscode.DocumentSymbol): boolean {
+    return (
+      symbol.kind === vscode.SymbolKind.Class ||
+      symbol.kind === vscode.SymbolKind.Struct ||
+      symbol.kind === vscode.SymbolKind.Interface ||
+      symbol.kind === vscode.SymbolKind.Enum
+    );
   }
 
   async parseFileWithDependencies(
@@ -860,16 +967,30 @@ export class GoParser {
 
   private getNodeType(
     kind: vscode.SymbolKind
-  ): "function" | "method" | "struct" | "interface" | "unknown" {
+  ):
+    | "function"
+    | "method"
+    | "class"
+    | "struct"
+    | "interface"
+    | "enum"
+    | "type"
+    | "unknown" {
     switch (kind) {
       case vscode.SymbolKind.Function:
         return "function";
       case vscode.SymbolKind.Method:
         return "method";
+      case vscode.SymbolKind.Class:
+        return "class";
       case vscode.SymbolKind.Struct:
         return "struct";
       case vscode.SymbolKind.Interface:
         return "interface";
+      case vscode.SymbolKind.Enum:
+        return "enum";
+      case vscode.SymbolKind.TypeParameter:
+        return "type";
       default:
         return "unknown";
     }

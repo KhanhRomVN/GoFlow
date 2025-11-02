@@ -75,3 +75,25 @@
 .react-flow__node {
   cursor: pointer;
 }
+
+/* ===================================
+   DECLARATION NODE EDGE STYLES
+   =================================== */
+
+/* Edge from FunctionNode to DeclarationNode (type="uses") */
+.react-flow__edge[data-type="uses"] .react-flow__edge-path {
+  stroke: #a855f7 !important;
+  stroke-width: 2;
+  stroke-dasharray: 4 2 !important;
+}
+
+.react-flow__edge[data-type="uses"].selected .react-flow__edge-path {
+  stroke: #c084fc !important;
+  stroke-width: 3;
+}
+
+/* DeclarationNode selection highlight */
+.react-flow__node.selected .declaration-node-container {
+  border-color: #a855f7 !important;
+  box-shadow: 0 0 0 2px #a855f7, 0 6px 16px rgba(168, 85, 247, 0.4) !important;
+}

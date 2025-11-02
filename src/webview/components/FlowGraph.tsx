@@ -41,15 +41,29 @@ interface FunctionNodeData extends Record<string, unknown> {
   lineHighlightedEdges?: Set<string>;
 }
 
-type FlowNode = Node<FunctionNodeData>;
+interface DeclarationNodeData extends Record<string, unknown> {
+  id: string;
+  label: string;
+  type: "class" | "struct" | "interface" | "enum" | "type";
+  file: string;
+  line: number;
+  code: string;
+  language?: string;
+  usedBy?: any[];
+}
+
+type FlowNode = Node<FunctionNodeData> | Node<DeclarationNodeData>;
 type FlowEdge = Edge;
 
 interface FlowGraphProps {
   vscode: any;
 }
 
+import DeclarationNode from "./DeclarationNode";
+
 const nodeTypes = {
   functionNode: FunctionNode as React.ComponentType<any>,
+  declarationNode: DeclarationNode as React.ComponentType<any>,
   fileGroupContainer: FileGroupContainer as React.ComponentType<any>,
 };
 
@@ -658,6 +672,34 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             },
             zIndex: 10,
           } as FlowNode);
+        } else if (
+          node.type === "class" ||
+          node.type === "struct" ||
+          node.type === "interface" ||
+          node.type === "enum" ||
+          node.type === "type"
+        ) {
+          // DeclarationNode
+          flowNodes.push({
+            id: node.id,
+            type: "declarationNode" as const,
+            position: { x: 0, y: 0 },
+            data: {
+              id: node.id,
+              label: node.label,
+              type: node.type,
+              file: node.file,
+              line: node.line,
+              code: node.code || "",
+              language: (node as any).language,
+              usedBy: (node as any).usedBy || [],
+            },
+            style: {
+              width: 350,
+              height: 200,
+            },
+            zIndex: 5,
+          } as FlowNode);
         }
       });
 
@@ -1005,6 +1047,11 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               return !hiddenNodeIds.has(n.id);
             }
 
+            // DeclarationNode: always visible (không bị ảnh hưởng bởi hiddenNodeIds)
+            if (n.type === "declarationNode") {
+              return true;
+            }
+
             // Filter FileGroupContainer: chỉ hiển thị nếu có ít nhất 1 node visible bên trong
             if (n.type === "fileGroupContainer") {
               const containerFile = (n.data as any).fileName;
@@ -1037,6 +1084,17 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             nodeColor={(node) => {
               if (node.type === "fileGroupContainer") {
                 return "rgba(251, 191, 36, 0.3)";
+              }
+              if (node.type === "declarationNode") {
+                const data = node.data as any;
+                const colorMap: Record<string, string> = {
+                  class: "#a855f7",
+                  struct: "#06b6d4",
+                  interface: "#f59e0b",
+                  enum: "#84cc16",
+                  type: "#6366f1",
+                };
+                return colorMap[data.type] || "#6b7280";
               }
               const data = node.data as any;
               return data.type === "function" ? "#4CAF50" : "#2196F3";

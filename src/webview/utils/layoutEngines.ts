@@ -28,7 +28,7 @@ interface FileGroup {
 function groupNodesByFile(nodes: Node[], edges: Edge[]): FileGroup[] {
   const nodesByFile = new Map<string, Node[]>();
 
-  // Group code nodes by file
+  // Group ONLY FunctionNodes by file (DeclarationNodes are NOT grouped)
   nodes.forEach((node) => {
     if (node.type === "functionNode") {
       const file = (node.data as any).file;
@@ -80,6 +80,46 @@ function getCrossFileEdges(groups: FileGroup[], allEdges: Edge[]): Edge[] {
   });
 
   return crossFileEdges;
+}
+
+// ==================== HELPER: PLACE DECLARATION NODES NEAR CALLERS ====================
+function placeDeclarationNodesNearCallers(
+  functionNodes: Node[],
+  declarationNodes: Node[],
+  edges: Edge[]
+): Node[] {
+  const positionedDeclarations: Node[] = [];
+
+  declarationNodes.forEach((declNode) => {
+    // Tìm FunctionNode sử dụng DeclarationNode này
+    const callerEdge = edges.find(
+      (edge) => edge.target === declNode.id && edge.type === "uses"
+    );
+
+    if (callerEdge) {
+      const callerNode = functionNodes.find((n) => n.id === callerEdge.source);
+
+      if (callerNode) {
+        // Đặt DeclarationNode bên phải FunctionNode, offset nhẹ
+        const offsetX = 120; // Khoảng cách ngang
+        const offsetY = -50; // Offset nhẹ theo chiều dọc
+
+        positionedDeclarations.push({
+          ...declNode,
+          position: {
+            x: callerNode.position.x + CODE_NODE_WIDTH + offsetX,
+            y: callerNode.position.y + offsetY,
+          },
+        });
+        return;
+      }
+    }
+
+    // Fallback: nếu không tìm thấy caller, đặt ở vị trí mặc định
+    positionedDeclarations.push(declNode);
+  });
+
+  return positionedDeclarations;
 }
 
 // ==================== DAGRE ====================
@@ -217,7 +257,8 @@ export function layoutWithDagre(
   dagre.layout(superGraph);
 
   // Step 4: Position file groups and adjust node positions
-  const finalNodes: Node[] = [];
+  const finalFunctionNodes: Node[] = [];
+  const declarationNodes = nodes.filter((n) => n.type === "declarationNode");
 
   groupBounds.forEach((bounds) => {
     const superNode = superGraph.node(bounds.fileName);
@@ -228,7 +269,7 @@ export function layoutWithDagre(
 
     // Adjust all nodes in this group
     bounds.nodes.forEach((node) => {
-      finalNodes.push({
+      finalFunctionNodes.push({
         ...node,
         position: {
           x: node.position.x - bounds.minX + groupOffsetX + FILE_GROUP_PADDING,
@@ -237,6 +278,14 @@ export function layoutWithDagre(
       });
     });
   });
+
+  const positionedDeclarations = placeDeclarationNodesNearCallers(
+    finalFunctionNodes,
+    declarationNodes,
+    edges
+  );
+
+  const finalNodes = [...finalFunctionNodes, ...positionedDeclarations];
 
   return { nodes: finalNodes, edges };
 }
@@ -381,7 +430,8 @@ export async function layoutWithELK(
   const layoutedSuperGraph = await elk.layout(superGraph);
 
   // Step 4: Position file groups and adjust node positions
-  const finalNodes: Node[] = [];
+  const finalFunctionNodes: Node[] = [];
+  const declarationNodes = nodes.filter((n) => n.type === "declarationNode");
 
   groupBounds.forEach((bounds) => {
     const superNode = layoutedSuperGraph.children?.find(
@@ -391,7 +441,7 @@ export async function layoutWithELK(
     const groupOffsetY = (superNode?.y || 0) + FILE_GROUP_PADDING;
 
     bounds.nodes.forEach((node) => {
-      finalNodes.push({
+      finalFunctionNodes.push({
         ...node,
         position: {
           x: node.position.x - bounds.minX + groupOffsetX,
@@ -400,6 +450,15 @@ export async function layoutWithELK(
       });
     });
   });
+
+  // Place DeclarationNodes near their callers
+  const positionedDeclarations = placeDeclarationNodesNearCallers(
+    finalFunctionNodes,
+    declarationNodes,
+    edges
+  );
+
+  const finalNodes = [...finalFunctionNodes, ...positionedDeclarations];
 
   return { nodes: finalNodes, edges };
 }
@@ -539,7 +598,8 @@ export function layoutWithD3Force(
   }
 
   // Step 5: Position all nodes based on super-node positions
-  const finalNodes: Node[] = [];
+  const finalFunctionNodes: Node[] = [];
+  const declarationNodes = nodes.filter((n) => n.type === "declarationNode");
 
   superNodes.forEach((superNode: any) => {
     const bounds = superNode.bounds;
@@ -547,7 +607,7 @@ export function layoutWithD3Force(
     const offsetY = superNode.y - bounds.centerY;
 
     bounds.nodes.forEach((node: Node) => {
-      finalNodes.push({
+      finalFunctionNodes.push({
         ...node,
         position: {
           x: node.position.x + offsetX,
@@ -556,6 +616,15 @@ export function layoutWithD3Force(
       });
     });
   });
+
+  // Place DeclarationNodes near their callers
+  const positionedDeclarations = placeDeclarationNodesNearCallers(
+    finalFunctionNodes,
+    declarationNodes,
+    edges
+  );
+
+  const finalNodes = [...finalFunctionNodes, ...positionedDeclarations];
 
   return { nodes: finalNodes, edges };
 }

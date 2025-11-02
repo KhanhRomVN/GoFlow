@@ -6,12 +6,11 @@ export interface Node {
   type:
     | "function"
     | "method"
+    | "class"
     | "struct"
     | "interface"
-    | "class"
-    | "constructor"
-    | "property"
-    | "variable"
+    | "enum"
+    | "type"
     | "unknown";
   file: string;
   line: number;

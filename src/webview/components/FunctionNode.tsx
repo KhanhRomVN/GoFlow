@@ -1,7 +1,7 @@
 import React, { memo, useState, useCallback, useRef, useEffect } from "react";
 import { Handle, Position, NodeProps, NodeResizer } from "@xyflow/react";
 import MonacoCodeEditor from "./MonacoCodeEditor";
-import "../styles/code-entity-node.css";
+import "../styles/function-node.css";
 import { Logger } from "../../utils/webviewLogger";
 
 const NODE_COLORS = {
