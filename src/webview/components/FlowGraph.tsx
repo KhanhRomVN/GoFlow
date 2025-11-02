@@ -220,20 +220,9 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           const isLineHighlighted = currentEdgeKey === edgeKey;
           const isNodeHighlighted = nodeHighlightedEdges.has(currentEdgeKey);
 
-          // ✅ SỬA: Dùng helper function
           const originalDashArray = getOriginalDashArray(edge);
 
-          Logger.debug(`[FlowGraph] Updating edge: ${currentEdgeKey}`);
-          Logger.debug(
-            `[FlowGraph] → Original strokeDasharray: ${originalDashArray}`
-          );
-          Logger.debug(`[FlowGraph] → edge.data.dashed: ${edge.data?.dashed}`);
-          Logger.debug(
-            `[FlowGraph] → edge.data.hasReturnValue: ${edge.data?.hasReturnValue}`
-          );
-
           if (isLineHighlighted) {
-            Logger.debug(`[FlowGraph] → LINE HIGHLIGHT: Setting yellow`);
             return {
               ...edge,
               animated: true,
@@ -248,7 +237,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           }
 
           if (isNodeHighlighted) {
-            Logger.debug(`[FlowGraph] → NODE HIGHLIGHT: Setting red`);
             return {
               ...edge,
               animated: true,
@@ -262,7 +250,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             };
           }
 
-          Logger.debug(`[FlowGraph] → DEFAULT: No highlight`);
           return {
             ...edge,
             animated: false,
@@ -288,7 +275,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         const currentEdgeKey = `${edge.source}->${edge.target}`;
         const isNodeHighlighted = nodeHighlightedEdges.has(currentEdgeKey);
 
-        // ✅ SỬA: Dùng helper function
         const originalDashArray = getOriginalDashArray(edge);
 
         if (isNodeHighlighted) {
@@ -383,7 +369,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           const isLineHighlighted = lineHighlightedEdges.has(currentEdgeKey);
           const isNodeHighlighted = edgeKeys.has(currentEdgeKey);
 
-          // ✅ SỬA: Dùng helper function
           const originalDashArray = getOriginalDashArray(edge);
 
           if (isLineHighlighted) {
@@ -503,7 +488,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         const currentEdgeKey = `${edge.source}->${edge.target}`;
         const isLineHighlighted = lineHighlightedEdges.has(currentEdgeKey);
 
-        // ✅ SỬA: Dùng helper function
         const originalDashArray = getOriginalDashArray(edge);
 
         if (isLineHighlighted) {
@@ -687,22 +671,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           const sourceNode = data.nodes.find((n) => n.id === edge.source);
           const targetNode = data.nodes.find((n) => n.id === edge.target);
 
-          // ✅ LOG: In ra thông tin edge trước khi style
-          Logger.debug(
-            `[FlowGraph] Processing edge: ${edge.source} → ${edge.target}`
-          );
-          Logger.debug(
-            `[FlowGraph] → hasReturnValue from backend: ${edge.hasReturnValue}`
-          );
-
-          // ✅ Xác định edge style: solid (return value used) vs dashed (no return value used)
           const hasReturnValue = edge.hasReturnValue ?? true;
-
-          // ✅ LOG: In ra style decision
-          Logger.debug(`[FlowGraph] → Final hasReturnValue: ${hasReturnValue}`);
-          Logger.debug(
-            `[FlowGraph] → Style: ${hasReturnValue ? "SOLID" : "DASHED"}`
-          );
 
           const edgeStyle = hasReturnValue
             ? {
@@ -717,9 +686,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
                 strokeDasharray: "8 4", // Nét đứt rõ ràng hơn
               };
 
-          Logger.debug(`[FlowGraph] → Edge style:`, edgeStyle);
-
-          // ✅ THÊM LOG KIỂM TRA FINAL EDGE OBJECT
           const finalEdge = {
             id: `edge-${edge.source}-${edge.target}-${index}`,
             source: edge.source,
@@ -728,18 +694,13 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             animated: false,
             style: edgeStyle,
             data: {
-              hasReturnValue: hasReturnValue, // ✅ Store for later use
+              hasReturnValue: hasReturnValue,
             },
             pathOptions: {
               borderRadius: 20,
               curvature: 0.5,
             },
           };
-
-          Logger.debug(`[FlowGraph] → Final edge object:`, finalEdge);
-          Logger.debug(
-            `[FlowGraph] → Edge will be ${hasReturnValue ? "SOLID" : "DASHED"}`
-          );
 
           if (sourceNode && targetNode) {
             edgeConnections.push({
@@ -763,7 +724,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             data: {
               dashed: !hasReturnValue,
               solid: hasReturnValue,
-              hasReturnValue: hasReturnValue, // ✅ THÊM BACKUP FIELD
+              hasReturnValue: hasReturnValue,
             },
             pathOptions: {
               borderRadius: 20,

@@ -16,9 +16,6 @@ export class GoParser {
           // Bỏ qua nested functions
           const parentSymbol = this.findParentSymbol(symbols, symbol);
           if (parentSymbol && this.isFunctionOrMethod(parentSymbol)) {
-            Logger.debug(
-              `[GoParser] Skipping nested function: ${symbol.name} (parent: ${parentSymbol.name})`
-            );
             continue;
           }
 
@@ -47,9 +44,6 @@ export class GoParser {
           // Bỏ qua nested functions
           const parentSymbol = this.findParentSymbol(symbols, symbol);
           if (parentSymbol && this.isFunctionOrMethod(parentSymbol)) {
-            Logger.debug(
-              `[GoParser] Skipping nested function: ${symbol.name} (parent: ${parentSymbol.name})`
-            );
             continue;
           }
 
@@ -57,15 +51,10 @@ export class GoParser {
           const cleanName = this.extractCleanFunctionName(symbol.name);
           const nodeId = `${nodeType}_${cleanName}`;
 
-          // ✅ CRITICAL: Phải dùng findFunctionCallsWithReturnUsage, KHÔNG phải findFunctionCallsWithLSP
           const callees = await this.findFunctionCallsWithReturnUsage(
             document,
             symbol,
             nodeMap
-          );
-
-          Logger.debug(
-            `[GoParser] Function ${nodeId} has ${callees.length} callees`
           );
 
           for (const callee of callees) {
@@ -75,17 +64,11 @@ export class GoParser {
             }
 
             if (!edgeMap.get(nodeId)!.has(callee.target)) {
-              // ✅ LOG: Xác nhận edge được tạo với hasReturnValue
-              Logger.debug(`[GoParser] Creating edge: ${edgeKey}`);
-              Logger.debug(
-                `[GoParser] → usesReturnValue: ${callee.usesReturnValue}`
-              );
-
               edges.push({
                 source: nodeId,
                 target: callee.target,
                 type: "calls",
-                hasReturnValue: callee.usesReturnValue, // ✅ MUST HAVE THIS
+                hasReturnValue: callee.usesReturnValue,
               });
               edgeMap.get(nodeId)!.add(callee.target);
             }
@@ -122,19 +105,7 @@ export class GoParser {
     functionName: string
   ): boolean {
     const beforeCall = line.substring(0, callPosition).trim();
-    const trimmedLine = line.trim();
-
-    // ✅ Đoạn từ đầu line đến sau function call (bao gồm cả tên function)
     const lineUpToCall = line.substring(0, callPosition + functionName.length);
-
-    Logger.debug(`[GoParser.detectReturnValueUsage] Function: ${functionName}`);
-    Logger.debug(`[GoParser.detectReturnValueUsage] Full line: "${line}"`);
-    Logger.debug(
-      `[GoParser.detectReturnValueUsage] Before call: "${beforeCall}"`
-    );
-    Logger.debug(
-      `[GoParser.detectReturnValueUsage] Line up to call: "${lineUpToCall}"`
-    );
 
     // ═══════════════════════════════════════════════════════════
     // PRIORITY 1: Check TOÀN BỘ LINE cho assignment patterns
@@ -142,17 +113,11 @@ export class GoParser {
 
     // Pattern 1a: Short variable declaration (:=) trong toàn bộ line up to call
     if (/:=/.test(lineUpToCall)) {
-      Logger.debug(
-        `[GoParser.detectReturnValueUsage] → USED (short variable declaration :=)`
-      );
       return true;
     }
 
     // Pattern 1b: Regular assignment (=) trong toàn bộ line up to call
     if (/[^=!<>]=(?!=)/.test(lineUpToCall)) {
-      Logger.debug(
-        `[GoParser.detectReturnValueUsage] → USED (regular assignment =)`
-      );
       return true;
     }
 
@@ -162,29 +127,21 @@ export class GoParser {
 
     // Pattern 2: Return statement
     if (/\breturn\s+$/.test(beforeCall)) {
-      Logger.debug(
-        `[GoParser.detectReturnValueUsage] → USED (return statement)`
-      );
       return true;
     }
 
     // Pattern 3: Comparison operators
     if (/[!=<>]+\s*$/.test(beforeCall)) {
-      Logger.debug(`[GoParser.detectReturnValueUsage] → USED (comparison)`);
       return true;
     }
 
     // Pattern 4: Function argument hoặc nested call
     if (/[,(]\s*$/.test(beforeCall)) {
-      Logger.debug(
-        `[GoParser.detectReturnValueUsage] → USED (function argument)`
-      );
       return true;
     }
 
     // Pattern 5: If/for/switch condition
     if (/\b(if|for|switch)\s*\(\s*$/.test(beforeCall)) {
-      Logger.debug(`[GoParser.detectReturnValueUsage] → USED (condition)`);
       return true;
     }
 
@@ -194,7 +151,6 @@ export class GoParser {
 
     // Pattern 6: Defer, go statements (không dùng return value)
     if (/\b(defer|go)\s+$/.test(beforeCall)) {
-      Logger.debug(`[GoParser.detectReturnValueUsage] → NOT USED (defer/go)`);
       return false;
     }
 
@@ -207,17 +163,11 @@ export class GoParser {
 
     // THÊM: Kiểm tra xem có phải là method call không dùng return value
     if (standalonePattern.test(checkStr)) {
-      Logger.debug(
-        `[GoParser.detectReturnValueUsage] → NOT USED (standalone call)`
-      );
       return false;
     }
 
     // Pattern 8: Inside block start (statement sau dấu {)
     if (/{\s*$/.test(beforeCall)) {
-      Logger.debug(
-        `[GoParser.detectReturnValueUsage] → NOT USED (inside block)`
-      );
       return false;
     }
 
@@ -240,9 +190,6 @@ export class GoParser {
       // Kiểm tra xem có phải là standalone logging call không
       const loggingPattern = /^(\s*)(\w+\.)*\w+\s*$/;
       if (loggingPattern.test(checkStr)) {
-        Logger.debug(
-          `[GoParser.detectReturnValueUsage] → NOT USED (logging call)`
-        );
         return false;
       }
     }
@@ -252,14 +199,10 @@ export class GoParser {
     // ═══════════════════════════════════════════════════════════
 
     if (beforeCall.length > 0 && !/^\s*$/.test(beforeCall)) {
-      Logger.debug(
-        `[GoParser.detectReturnValueUsage] → USED (complex context - default assume used)`
-      );
       return true;
     }
 
     // Nếu không có gì trước function call → standalone
-    Logger.debug(`[GoParser.detectReturnValueUsage] → NOT USED (no context)`);
     return false;
   }
 
@@ -285,11 +228,6 @@ export class GoParser {
       while ((match = functionCallRegex.exec(line)) !== null) {
         const functionName = match[1];
         const charIndex = match.index;
-
-        Logger.debug(
-          `[GoParser] Found function call: ${functionName} at line ${lineIndex}, char ${charIndex}`
-        );
-        Logger.debug(`[GoParser] Line content: "${line}"`);
 
         const absoluteLine = symbol.range.start.line + lineIndex;
         const position = new vscode.Position(absoluteLine, charIndex);
@@ -321,7 +259,6 @@ export class GoParser {
                   const sourceId = `${sourceType}_${symbol.name}`;
 
                   if (targetId !== sourceId) {
-                    // ✅ Phát hiện xem return value có được sử dụng không
                     const usesReturnValue = this.detectReturnValueUsage(
                       line,
                       charIndex,
@@ -481,10 +418,6 @@ export class GoParser {
           symbol
         );
 
-        Logger.debug(
-          `[GoParser] Processing ${currentNode.id}: found ${callees.length} callees`
-        );
-
         for (const callee of callees) {
           // Thêm edge
           if (!edgeMap.has(currentNode.id)) {
@@ -492,19 +425,11 @@ export class GoParser {
           }
 
           if (!edgeMap.get(currentNode.id)!.has(callee.targetId)) {
-            // ✅ LOG & ADD hasReturnValue
-            Logger.debug(
-              `[GoParser] Edge: ${currentNode.id} → ${callee.targetId}`
-            );
-            Logger.debug(
-              `[GoParser] → usesReturnValue: ${callee.usesReturnValue}`
-            );
-
             allEdges.push({
               source: currentNode.id,
               target: callee.targetId,
               type: "calls",
-              hasReturnValue: callee.usesReturnValue, // ✅ PHẢI CÓ
+              hasReturnValue: callee.usesReturnValue,
             });
             edgeMap.get(currentNode.id)!.add(callee.targetId);
           }
@@ -549,7 +474,7 @@ export class GoParser {
       targetSymbol: vscode.DocumentSymbol;
       targetDocument: vscode.TextDocument;
       crossFile: boolean;
-      usesReturnValue: boolean; // ✅ THÊM FIELD NÀY
+      usesReturnValue: boolean;
     }>
   > {
     const callees: Array<{
@@ -618,15 +543,10 @@ export class GoParser {
                   const sourceId = `${sourceType}_${symbol.name}`;
 
                   if (targetId !== sourceId) {
-                    // ✅ DETECT RETURN VALUE USAGE
                     const usesReturnValue = this.detectReturnValueUsage(
                       line,
                       charIndex,
                       functionName
-                    );
-
-                    Logger.debug(
-                      `[GoParser] Call: ${functionName} → usesReturnValue: ${usesReturnValue}`
                     );
 
                     callees.push({
@@ -634,7 +554,7 @@ export class GoParser {
                       targetSymbol,
                       targetDocument: defDocument,
                       crossFile: isCrossFile,
-                      usesReturnValue, // ✅ THÊM VÀO ĐÂY
+                      usesReturnValue,
                     });
                   }
                 }
