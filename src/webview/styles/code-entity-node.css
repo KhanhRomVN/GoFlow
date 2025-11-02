@@ -504,3 +504,37 @@
     filter: brightness(1.1);
   }
 }
+
+/* Nested function indicator */
+.code-entity-node-nested-indicator {
+  font-size: 12px;
+  margin-left: 6px;
+  opacity: 0.8;
+  animation: pulse-nested 2s ease-in-out infinite;
+}
+
+@keyframes pulse-nested {
+  0%, 100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+/* Return type badge */
+.code-entity-node-return-type {
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: auto;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}

@@ -8,12 +8,102 @@ const NODE_COLORS = {
   function: {
     header: "bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500",
     accent: "#10b981",
+    badge: "Function",
   },
   method: {
     header: "bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500",
     accent: "#6366f1",
+    badge: "Method",
+  },
+  class: {
+    header: "bg-gradient-to-r from-purple-500 via-pink-500 to-rose-500",
+    accent: "#a855f7",
+    badge: "Class",
+  },
+  struct: {
+    header: "bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500",
+    accent: "#06b6d4",
+    badge: "Struct",
+  },
+  interface: {
+    header: "bg-gradient-to-r from-amber-500 via-orange-500 to-red-500",
+    accent: "#f59e0b",
+    badge: "Interface",
+  },
+  constructor: {
+    header: "bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500",
+    accent: "#8b5cf6",
+    badge: "Constructor",
+  },
+  property: {
+    header: "bg-gradient-to-r from-lime-500 via-green-500 to-emerald-500",
+    accent: "#84cc16",
+    badge: "Property",
+  },
+  variable: {
+    header: "bg-gradient-to-r from-slate-500 via-gray-500 to-zinc-500",
+    accent: "#64748b",
+    badge: "Variable",
+  },
+  unknown: {
+    header: "bg-gradient-to-r from-gray-500 via-slate-500 to-neutral-500",
+    accent: "#6b7280",
+    badge: "Unknown",
   },
 } as const;
+
+// Language-specific badge mapping
+const LANGUAGE_BADGES: Record<string, Record<string, string>> = {
+  python: {
+    function: "def",
+    method: "def",
+    class: "class",
+  },
+  javascript: {
+    function: "function",
+    method: "method",
+    class: "class",
+  },
+  typescript: {
+    function: "function",
+    method: "method",
+    class: "class",
+    interface: "interface",
+  },
+  go: {
+    function: "func",
+    method: "func",
+    struct: "type",
+    interface: "type",
+  },
+  java: {
+    function: "method",
+    method: "method",
+    class: "class",
+    interface: "interface",
+    constructor: "constructor",
+  },
+  csharp: {
+    function: "method",
+    method: "method",
+    class: "class",
+    interface: "interface",
+    struct: "struct",
+    property: "property",
+  },
+  rust: {
+    function: "fn",
+    method: "fn",
+    struct: "struct",
+    interface: "trait",
+  },
+  php: {
+    function: "function",
+    method: "method",
+    class: "class",
+    interface: "interface",
+  },
+};
 
 interface CodeEntityNodeData extends Record<string, unknown> {
   id: string;
@@ -237,9 +327,42 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
           }`}
         >
           <span className="code-entity-node-type-badge">
-            {nodeData.type === "function" ? "Function" : "Method"}
+            {(() => {
+              const language = (nodeData as any).language || "unknown";
+              const type = nodeData.type;
+
+              // Ưu tiên badge theo ngôn ngữ
+              if (
+                LANGUAGE_BADGES[language] &&
+                LANGUAGE_BADGES[language][type]
+              ) {
+                return LANGUAGE_BADGES[language][type];
+              }
+
+              // Fallback về badge mặc định
+              return (
+                NODE_COLORS[type as keyof typeof NODE_COLORS]?.badge || type
+              );
+            })()}
           </span>
           <span className="code-entity-node-label">{nodeData.label}</span>
+          {(nodeData as any).isNested && (
+            <span
+              className="code-entity-node-nested-indicator"
+              title="Nested function"
+            >
+              🔗
+            </span>
+          )}
+          {(nodeData as any).returnType &&
+            (nodeData as any).returnType !== "unknown" && (
+              <span
+                className="code-entity-node-return-type"
+                title={`Returns: ${(nodeData as any).returnType}`}
+              >
+                → {(nodeData as any).returnType}
+              </span>
+            )}
           {isNodeHighlighted && (
             <span className="code-entity-node-parent-indicator">
               ⬆️ Parents

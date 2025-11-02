@@ -135,7 +135,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     if (!flow) return;
 
     // TODO: Highlight all nodes and edges in this flow path
-    console.log("[FlowGraph] Selected flow:", flow);
   }, []);
 
   const handleDeleteFlow = useCallback((flowId: string) => {
@@ -322,7 +321,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         EdgeTracker.logTracedPaths(tracedPath);
 
         const report = EdgeTracker.getFormattedPathReport(tracedPath);
-        console.log("\n" + report);
 
         vscode.postMessage({
           command: "showPathTrace",
@@ -632,6 +630,21 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           const sourceNode = data.nodes.find((n) => n.id === edge.source);
           const targetNode = data.nodes.find((n) => n.id === edge.target);
 
+          // Xác định edge style dựa trên hasReturnValue
+          const hasReturnValue = edge.hasReturnValue ?? true;
+          const edgeStyle = hasReturnValue
+            ? {
+                stroke: "#666",
+                strokeWidth: 2,
+                strokeLinecap: "round" as const,
+              }
+            : {
+                stroke: "#999",
+                strokeWidth: 2,
+                strokeLinecap: "round" as const,
+                strokeDasharray: "5,5",
+              };
+
           if (sourceNode && targetNode) {
             edgeConnections.push({
               source: edge.source,
@@ -650,11 +663,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             target: edge.target,
             type: "default",
             animated: false,
-            style: {
-              stroke: "#666",
-              strokeWidth: 2,
-              strokeLinecap: "round",
-            },
+            style: edgeStyle,
             pathOptions: {
               borderRadius: 20,
               curvature: 0.5,
@@ -1032,8 +1041,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               onClick={() => {
                 const stats = EdgeTracker.getStats();
                 EdgeTracker.logCurrentState();
-
-                console.log("\n" + EdgeTracker.getEdgeListFormatted());
 
                 vscode.postMessage({
                   command: "showEdgeStats",

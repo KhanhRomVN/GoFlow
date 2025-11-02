@@ -43,21 +43,12 @@ class FlowPathTrackerClass {
     const targetIds = new Set(edges.map((e) => e.target));
     const rootNodeIds = Array.from(nodeIds).filter((id) => !targetIds.has(id));
 
-    Logger.info(
-      `[FlowPathTracker] Found ${rootNodeIds.length} root nodes`,
-      rootNodeIds
-    );
-
     // Với mỗi root node, DFS để tìm tất cả paths đến end nodes
     rootNodeIds.forEach((rootId) => {
       const rootNode = nodes.find((n) => n.id === rootId);
       if (!rootNode) return;
 
       const paths = this.findAllPathsFromNode(rootId, nodes, edges);
-      Logger.info(
-        `[FlowPathTracker] Found ${paths.length} paths from ${rootNode.label}`,
-        paths
-      );
 
       paths.forEach((path, index) => {
         const flowId = `flow-${rootId}-${index}-${Date.now()}`;
@@ -77,7 +68,6 @@ class FlowPathTrackerClass {
     });
 
     this.notifyListeners();
-    Logger.info(`[FlowPathTracker] Total flows generated: ${this.flows.size}`);
   }
 
   /**

@@ -10,28 +10,20 @@ export class GoParser {
       const edges: Edge[] = [];
       const edgeMap = new Map<string, Set<string>>();
 
+      // === PASS 1: Tạo tất cả nodes trước (để có hasReturnValue) ===
       for (const symbol of symbols) {
         if (this.isFunctionOrMethod(symbol)) {
+          // Bỏ qua nested functions
+          const parentSymbol = this.findParentSymbol(symbols, symbol);
+          if (parentSymbol && this.isFunctionOrMethod(parentSymbol)) {
+            Logger.debug(
+              `[GoParser] Skipping nested function: ${symbol.name} (parent: ${parentSymbol.name})`
+            );
+            continue;
+          }
+
           const node = this.createNodeFromSymbol(symbol, document);
           nodes.push(node);
-
-          const callees = await this.findFunctionCallsWithLSP(document, symbol);
-
-          for (const callee of callees) {
-            const edgeKey = `${node.id}->${callee.target}`;
-            if (!edgeMap.has(node.id)) {
-              edgeMap.set(node.id, new Set());
-            }
-
-            if (!edgeMap.get(node.id)!.has(callee.target)) {
-              edges.push({
-                source: node.id,
-                target: callee.target,
-                type: "calls",
-              });
-              edgeMap.get(node.id)!.add(callee.target);
-            }
-          }
         } else if (this.isTypeOrInterface(symbol)) {
           const config = vscode.workspace.getConfiguration("goflow");
           if (
@@ -41,6 +33,48 @@ export class GoParser {
               config.get("showInterfaces"))
           ) {
             nodes.push(this.createNodeFromSymbol(symbol, document));
+          }
+        }
+      }
+
+      // Tạo node map để lookup nhanh
+      const nodeMap = new Map<string, Node>();
+      nodes.forEach((node) => nodeMap.set(node.id, node));
+
+      // === PASS 2: Tạo edges với hasReturnValue chính xác ===
+      for (const symbol of symbols) {
+        if (this.isFunctionOrMethod(symbol)) {
+          // Bỏ qua nested functions
+          const parentSymbol = this.findParentSymbol(symbols, symbol);
+          if (parentSymbol && this.isFunctionOrMethod(parentSymbol)) {
+            continue;
+          }
+
+          const nodeType = this.getNodeType(symbol.kind);
+          const cleanName = this.extractCleanFunctionName(symbol.name);
+          const nodeId = `${nodeType}_${cleanName}`;
+
+          const callees = await this.findFunctionCallsWithLSP(document, symbol);
+
+          for (const callee of callees) {
+            const edgeKey = `${nodeId}->${callee.target}`;
+            if (!edgeMap.has(nodeId)) {
+              edgeMap.set(nodeId, new Set());
+            }
+
+            if (!edgeMap.get(nodeId)!.has(callee.target)) {
+              // Lấy target node từ nodeMap
+              const targetNode = nodeMap.get(callee.target);
+              const hasReturnValue = targetNode?.hasReturnValue ?? true;
+
+              edges.push({
+                source: nodeId,
+                target: callee.target,
+                type: "calls",
+                hasReturnValue,
+              });
+              edgeMap.get(nodeId)!.add(callee.target);
+            }
           }
         }
       }
@@ -66,6 +100,22 @@ export class GoParser {
       Logger.error("Failed to parse Go file", error);
       throw error;
     }
+  }
+
+  private findParentSymbol(
+    allSymbols: vscode.DocumentSymbol[],
+    targetSymbol: vscode.DocumentSymbol
+  ): vscode.DocumentSymbol | undefined {
+    for (const symbol of allSymbols) {
+      if (symbol.children && symbol.children.length > 0) {
+        if (symbol.children.includes(targetSymbol)) {
+          return symbol;
+        }
+        const found = this.findParentSymbol(symbol.children, targetSymbol);
+        if (found) return found;
+      }
+    }
+    return undefined;
   }
 
   async parseFileWithDependencies(
@@ -475,12 +525,28 @@ export class GoParser {
 
   private createNodeFromSymbol(
     symbol: vscode.DocumentSymbol,
-    document: vscode.TextDocument
+    document: vscode.TextDocument,
+    parentSymbol?: vscode.DocumentSymbol
   ): Node {
     const nodeType = this.getNodeType(symbol.kind);
     const cleanName = this.extractCleanFunctionName(symbol.name);
     const id = `${nodeType}_${cleanName}`;
     const code = document.getText(symbol.range);
+
+    // Phát hiện language từ file extension
+    const language = this.detectLanguage(document.fileName);
+
+    // Phát hiện return type và nested function
+    const { returnType, hasReturnValue } = this.analyzeReturnType(
+      code,
+      language
+    );
+    const isNested = !!parentSymbol;
+    const parentNodeId = parentSymbol
+      ? `${this.getNodeType(parentSymbol.kind)}_${this.extractCleanFunctionName(
+          parentSymbol.name
+        )}`
+      : undefined;
 
     return {
       id,
@@ -491,6 +557,103 @@ export class GoParser {
       endLine: symbol.range.end.line + 1,
       kind: symbol.kind,
       code: code,
+      language,
+      returnType,
+      hasReturnValue,
+      isNested,
+      parentNodeId,
+    };
+  }
+
+  private detectLanguage(fileName: string): string {
+    const ext = fileName.split(".").pop()?.toLowerCase() || "";
+    const langMap: Record<string, string> = {
+      go: "go",
+      py: "python",
+      js: "javascript",
+      ts: "typescript",
+      java: "java",
+      cs: "csharp",
+      rb: "ruby",
+      php: "php",
+      rs: "rust",
+      kt: "kotlin",
+      swift: "swift",
+      cpp: "cpp",
+      c: "c",
+    };
+    return langMap[ext] || "unknown";
+  }
+
+  private analyzeReturnType(
+    code: string,
+    language: string
+  ): { returnType: string; hasReturnValue: boolean } {
+    const firstLine = code.split("\n")[0].trim();
+
+    // Go: func name() returnType
+    if (language === "go") {
+      const goReturnMatch = firstLine.match(/\)\s*([^{]+)\s*{/);
+      if (goReturnMatch) {
+        const returnPart = goReturnMatch[1].trim();
+        return {
+          returnType: returnPart,
+          hasReturnValue: returnPart !== "" && returnPart !== "void",
+        };
+      }
+    }
+
+    // Python: def name() -> returnType:
+    if (language === "python") {
+      const pyReturnMatch = firstLine.match(/->\s*([^:]+):/);
+      if (pyReturnMatch) {
+        const returnPart = pyReturnMatch[1].trim();
+        return {
+          returnType: returnPart,
+          hasReturnValue: returnPart !== "None",
+        };
+      }
+      // Nếu không có annotation, kiểm tra có return statement
+      return {
+        returnType: "unknown",
+        hasReturnValue: /\breturn\s+[^;\n]+/.test(code),
+      };
+    }
+
+    // JavaScript/TypeScript: function name(): returnType
+    if (language === "javascript" || language === "typescript") {
+      const jsReturnMatch = firstLine.match(/\):\s*([^{]+)\s*{/);
+      if (jsReturnMatch) {
+        const returnPart = jsReturnMatch[1].trim();
+        return {
+          returnType: returnPart,
+          hasReturnValue: returnPart !== "void",
+        };
+      }
+      return {
+        returnType: "unknown",
+        hasReturnValue: /\breturn\s+[^;\n]+/.test(code),
+      };
+    }
+
+    // Java/C#/Kotlin: returnType name()
+    if (["java", "csharp", "kotlin"].includes(language)) {
+      const javaReturnMatch = firstLine.match(
+        /^\s*(?:public|private|protected|internal|static|final|override)?\s+([^\s(]+)\s+\w+\s*\(/
+      );
+      if (javaReturnMatch) {
+        const returnPart = javaReturnMatch[1].trim();
+        return {
+          returnType: returnPart,
+          hasReturnValue: returnPart !== "void" && returnPart !== "Unit",
+        };
+      }
+    }
+
+    // Default: kiểm tra có return statement
+    return {
+      returnType: "unknown",
+      hasReturnValue: /\breturn\s+[^;\n]+/.test(code),
     };
   }
 
