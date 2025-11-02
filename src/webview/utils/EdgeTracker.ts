@@ -88,11 +88,6 @@ class EdgeTrackerClass {
 
     if (!this.edges.has(edgeKey)) {
       this.edges.set(edgeKey, connection);
-
-      Logger.info(
-        `[EdgeTracker] New edge added: ${connection.sourceLabel}(${connection.sourceType}) -> ${connection.targetLabel}(${connection.targetType})`
-      );
-
       this.notifyListeners();
     }
   }
@@ -103,11 +98,6 @@ class EdgeTrackerClass {
     if (this.edges.has(edgeKey)) {
       const edge = this.edges.get(edgeKey)!;
       this.edges.delete(edgeKey);
-
-      Logger.info(
-        `[EdgeTracker] Edge removed: ${edge.sourceLabel} -> ${edge.targetLabel}`
-      );
-
       this.notifyListeners();
     }
   }
@@ -176,22 +166,9 @@ class EdgeTrackerClass {
     const edges = this.getAllEdges();
     const stats = this.getStats();
 
-    Logger.info(`[EdgeTracker] Current state:`, {
-      totalEdges: stats.totalEdges,
-      breakdown: {
-        "function -> function": stats.functionToFunction,
-        "function -> method": stats.functionToMethod,
-        "method -> function": stats.methodToFunction,
-        "method -> method": stats.methodToMethod,
-      },
-    });
-
     if (edges.length === 0) {
-      Logger.debug("[EdgeTracker] No edges to display");
       return;
     }
-
-    Logger.debug(`[EdgeTracker] Displaying all ${edges.length} edges:`);
 
     const groupedEdges = {
       "function -> function": edges.filter(
@@ -207,19 +184,6 @@ class EdgeTrackerClass {
         (e) => e.sourceType === "method" && e.targetType === "method"
       ),
     };
-
-    Object.entries(groupedEdges).forEach(([category, categoryEdges]) => {
-      if (categoryEdges.length > 0) {
-        Logger.debug(`\n  📊 ${category} (${categoryEdges.length} edges):`);
-        categoryEdges.forEach((edge, index) => {
-          Logger.debug(
-            `    ${index + 1}. ${edge.sourceLabel} → ${edge.targetLabel}`
-          );
-        });
-      }
-    });
-
-    Logger.debug(`\n  ✅ Total: ${edges.length} edges logged`);
   }
 
   subscribe(listener: (edges: EdgeConnection[]) => void): () => void {
@@ -240,7 +204,6 @@ class EdgeTrackerClass {
 
   clear(): void {
     this.edges.clear();
-    Logger.info("[EdgeTracker] All edges cleared");
     this.notifyListeners();
   }
 
@@ -252,9 +215,6 @@ class EdgeTrackerClass {
     try {
       const connections: EdgeConnection[] = JSON.parse(json);
       this.updateEdges(connections);
-      Logger.info(
-        `[EdgeTracker] Imported ${connections.length} edges from JSON`
-      );
     } catch (error) {
       Logger.error("[EdgeTracker] Failed to import from JSON", error);
     }
@@ -275,9 +235,6 @@ class EdgeTrackerClass {
     const incomingEdges = edges.filter((e) => e.target === targetNodeId);
 
     if (incomingEdges.length === 0) {
-      Logger.info(
-        `[EdgeTracker] Node ${targetNodeId} is a root node (no incoming edges)`
-      );
       return {
         targetNode: {
           nodeId: targetNodeId,
@@ -371,28 +328,11 @@ class EdgeTrackerClass {
 
     const { targetNode, paths } = tracedPath;
 
-    Logger.info(
-      `[EdgeTracker] 🎯 Tracing paths TO: ${targetNode.nodeLabel} (${targetNode.nodeType})`
-    );
-    Logger.info(`[EdgeTracker] File: ${targetNode.file}:${targetNode.line}`);
-
     if (paths.length === 0) {
-      Logger.info(
-        `[EdgeTracker] ✅ ${targetNode.nodeLabel} is a ROOT node (no incoming edges)`
-      );
       return;
     }
 
-    Logger.info(
-      `[EdgeTracker] Found ${paths.length} path(s) to root node(s):\n`
-    );
-
     paths.forEach((path, pathIndex) => {
-      Logger.info(`[EdgeTracker] 📍 Path ${pathIndex + 1}:`);
-      Logger.info(
-        `[EdgeTracker]   Depth: ${path.totalDepth} | Nodes: ${path.nodes.length}`
-      );
-
       const pathString = path.nodes
         .reverse()
         .map((node, idx) => {
@@ -402,13 +342,7 @@ class EdgeTrackerClass {
           }) [${node.file?.split("/").pop()}:${node.line}]`;
         })
         .join("\n");
-
-      Logger.info(`[EdgeTracker] Path flow:\n${pathString}\n`);
     });
-
-    Logger.info(
-      `[EdgeTracker] ═══════════════════════════════════════════════`
-    );
   }
 
   getFormattedPathReport(tracedPath: TracedPath): string {

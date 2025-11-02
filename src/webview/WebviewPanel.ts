@@ -25,20 +25,11 @@ export class WebviewPanel {
 
     this.panel.webview.onDidReceiveMessage(
       async (message) => {
-        Logger.debug(`[WebviewPanel] Received message: ${message.command}`, {
-          command: message.command,
-          hasFile: !!message.file,
-          hasCode: !!message.code,
-        });
-
         switch (message.command) {
           case "jumpToDefinition":
             await this.jumpToDefinition(message.file, message.line);
             break;
           case "getCodePreview":
-            Logger.debug(
-              `[WebviewPanel] Get code preview for node: ${message.nodeId}`
-            );
             await this.sendCodePreview(
               message.file,
               message.line,
@@ -46,9 +37,6 @@ export class WebviewPanel {
             );
             break;
           case "saveCode":
-            Logger.debug(
-              `[WebviewPanel] New code length: ${message.code?.length || 0}`
-            );
             await this.handleSaveCode(
               message.file,
               message.startLine,
@@ -88,13 +76,6 @@ export class WebviewPanel {
                 kind: vscode.window.activeColorTheme.kind,
               },
             });
-            Logger.debug(
-              `[WebviewPanel] Sent graph: ${
-                this.graphData.nodes.length
-              } nodes, ${this.graphData.edges.length} edges, theme: ${
-                isDark ? "dark" : "light"
-              }`
-            );
             break;
           case "export":
             await this.handleExport(message.dataUrl);
@@ -176,7 +157,6 @@ export class WebviewPanel {
     try {
       const uri = vscode.Uri.file(file);
       const document = await vscode.workspace.openTextDocument(uri);
-      Logger.debug(`[WebviewPanel] Document opened: ${file}`);
 
       const editor = await vscode.window.showTextDocument(
         document,
@@ -202,15 +182,9 @@ export class WebviewPanel {
     newCode: string,
     nodeId: string
   ) {
-    Logger.debug(`[WebviewPanel] New code:\n${newCode}`);
-
     try {
       const uri = vscode.Uri.file(file);
       const document = await vscode.workspace.openTextDocument(uri);
-
-      Logger.debug(
-        `[WebviewPanel] Document opened, total lines: ${document.lineCount}`
-      );
 
       // Validate line range
       if (startLine < 1 || endLine > document.lineCount) {
@@ -236,10 +210,6 @@ export class WebviewPanel {
         )
       );
 
-      Logger.debug(
-        `[WebviewPanel] Replacing range: ${range.start.line}:${range.start.character} - ${range.end.line}:${range.end.character}`
-      );
-
       edit.replace(uri, range, newCode);
 
       const success = await vscode.workspace.applyEdit(edit);
@@ -263,7 +233,6 @@ export class WebviewPanel {
         );
         if (nodeIndex !== -1) {
           this.graphData.nodes[nodeIndex].code = newCode;
-          Logger.debug(`[WebviewPanel] Updated node ${nodeId} in graph data`);
         }
       } else {
         const errorMsg = "Failed to apply code changes";
@@ -302,8 +271,6 @@ export class WebviewPanel {
 
       const absoluteLine = startLine + relativeLine - 2;
 
-      Logger.debug(`[WebviewPanel] Absolute line in document: ${absoluteLine}`);
-
       // Parse line để tìm function calls
       const functionCallRegex = /\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
       let match;
@@ -335,12 +302,6 @@ export class WebviewPanel {
       for (const call of functionCalls) {
         const position = new vscode.Position(absoluteLine, call.index);
 
-        Logger.debug(`[WebviewPanel] Resolving at position:`, {
-          line: absoluteLine,
-          character: call.index,
-          functionName: call.name,
-        });
-
         try {
           const definitions = await vscode.commands.executeCommand<
             vscode.Location[]
@@ -358,9 +319,6 @@ export class WebviewPanel {
               defFilePath.includes("/vendor/") ||
               !defFilePath.endsWith(".go")
             ) {
-              Logger.debug(
-                `[WebviewPanel] Skipping stdlib/vendor: ${defFilePath}`
-              );
               continue;
             }
 

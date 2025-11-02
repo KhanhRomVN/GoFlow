@@ -114,6 +114,15 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
           shouldTracePath: true,
         });
       }
+
+      if (typeof nodeData.onNodeHighlight === "function") {
+        nodeData.onNodeHighlight(nodeData.id);
+        setIsNodeHighlighted(true);
+      } else {
+        Logger.warn(
+          `[CodeEntityNode] onNodeHighlight is not a function for: ${nodeData.id}`
+        );
+      }
     },
     [nodeData]
   );
@@ -124,20 +133,6 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
         return;
       }
 
-      // Nếu đang có line highlight (từ click dòng code), giữ nguyên và thêm node highlight
-      if (lineHighlightedEdges.size > 0) {
-        // Vẫn cho phép toggle node highlight khi có line highlight
-        if (isNodeHighlighted) {
-          nodeData.onClearNodeHighlight?.();
-          setIsNodeHighlighted(false);
-        } else {
-          nodeData.onNodeHighlight?.(nodeData.id);
-          setIsNodeHighlighted(true);
-        }
-        return;
-      }
-
-      // Trường hợp thông thường (không có line highlight)
       if (
         typeof nodeData.onNodeHighlight === "function" &&
         typeof nodeData.onClearNodeHighlight === "function"
@@ -151,16 +146,8 @@ const CodeEntityNode: React.FC<NodeProps> = ({ data, selected }) => {
         }
       }
     },
-    [nodeData, isNodeHighlighted, lineHighlightedEdges.size]
+    [nodeData, isNodeHighlighted]
   );
-
-  useEffect(() => {
-    if (lineHighlightedEdges.size > 0 && isNodeHighlighted) {
-      Logger.debug(
-        `[CodeEntityNode] Line highlight active, keeping node highlight for: ${nodeData.id}`
-      );
-    }
-  }, [lineHighlightedEdges.size, isNodeHighlighted, nodeData.id]);
 
   return (
     <>

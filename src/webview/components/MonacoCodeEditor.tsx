@@ -75,10 +75,6 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       editor.onDidChangeCursorPosition((e: any) => {
         const lineNumber = e.position.lineNumber;
         const lineContent = editor.getModel()?.getLineContent(lineNumber) || "";
-        Logger.debug("[MonacoCodeEditor] Cursor moved to line:", {
-          lineNumber,
-          lineContent,
-        });
         onLineClick(lineNumber, lineContent);
       });
     }

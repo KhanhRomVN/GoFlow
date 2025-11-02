@@ -86,6 +86,10 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(
     null
   );
+  const [pendingHighlightNodeId, setPendingHighlightNodeId] = useState<
+    string | null
+  >(null);
+  const [isGraphReady, setIsGraphReady] = useState(false);
 
   // Use debounce for nodes to prevent excessive re-renders
   const debouncedNodes = useDebounce(nodes, 100);
@@ -181,9 +185,25 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
 
   const handleNodeHighlight = useCallback(
     (targetNodeId: string) => {
+      // If graph not ready, save request for later
+      if (!isGraphReady || edges.length === 0 || nodes.length === 0) {
+        Logger.warn(
+          `[FlowGraph] Graph not ready. Saving pending highlight request for: ${targetNodeId}`
+        );
+        setPendingHighlightNodeId(targetNodeId);
+        return;
+      }
+
       const incomingEdges = edges.filter(
         (edge) => edge.target === targetNodeId
       );
+
+      if (incomingEdges.length === 0) {
+        Logger.warn(
+          `[FlowGraph] No incoming edges found for ${targetNodeId} - this is a root node`
+        );
+      }
+
       const edgeKeys = new Set(
         incomingEdges.map((edge) => `${edge.source}->${edge.target}`)
       );
@@ -217,6 +237,8 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           tracedPath: tracedPath,
           formattedReport: report,
         });
+      } else {
+        Logger.warn(`[FlowGraph] No traced path found for ${targetNodeId}`);
       }
 
       setEdges((currentEdges) => {
@@ -297,8 +319,38 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         });
       });
     },
-    [edges, setEdges, lineHighlightedEdges, setNodes, nodes, vscode]
+    [
+      edges,
+      setEdges,
+      lineHighlightedEdges,
+      setNodes,
+      nodes,
+      vscode,
+      isGraphReady,
+    ]
   );
+
+  // Process pending highlight when graph becomes ready
+  useEffect(() => {
+    if (
+      isGraphReady &&
+      pendingHighlightNodeId &&
+      edges.length > 0 &&
+      nodes.length > 0
+    ) {
+      // Execute the pending highlight
+      handleNodeHighlight(pendingHighlightNodeId);
+
+      // Clear pending request
+      setPendingHighlightNodeId(null);
+    }
+  }, [
+    isGraphReady,
+    pendingHighlightNodeId,
+    edges.length,
+    nodes.length,
+    handleNodeHighlight,
+  ]);
 
   const handleClearNodeHighlight = useCallback(() => {
     setNodeHighlightedEdges(new Set());
@@ -533,11 +585,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
   );
 
   useEffect(() => {
-    const unsubscribe = EdgeTracker.subscribe((edges) => {
-      Logger.info(
-        `[FlowGraph] EdgeTracker updated: ${edges.length} edges tracked`
-      );
-    });
+    const unsubscribe = EdgeTracker.subscribe((edges) => {});
 
     return () => {
       unsubscribe();
@@ -564,10 +612,14 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         setEdges(layoutedEdges);
         setIsLoading(false);
         setError(null);
+
+        // Mark graph as ready AFTER state updates
+        setIsGraphReady(true);
       } catch (err) {
         console.error("❌ [FlowGraph] Failed to render graph:", err);
         setError(err instanceof Error ? err.message : "Unknown error");
         setIsLoading(false);
+        setIsGraphReady(false);
       }
     },
     [
@@ -702,6 +754,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
       try {
         switch (message.command) {
           case "renderGraph":
+            setIsGraphReady(false); // Reset flag before rendering
             if (message.config) {
               setEnableJumpToFile(message.config.enableJumpToFile);
             }
@@ -739,7 +792,14 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     return () => {
       window.removeEventListener("message", messageHandler);
     };
-  }, [renderGraph, handleHighlightEdge, handleClearHighlight]);
+  }, [
+    renderGraph,
+    handleHighlightEdge,
+    handleClearHighlight,
+    handleNodeHighlight,
+    edges,
+    nodes,
+  ]);
 
   return (
     <div style={{ width: "100vw", height: "100vh" }}>

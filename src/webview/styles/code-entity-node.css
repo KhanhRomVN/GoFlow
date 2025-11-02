@@ -476,3 +476,31 @@
 .code-entity-node-action-cancel:hover:not(:disabled) {
   background: #dc2626;
 }
+
+/* Dual highlight mode: both line and node highlight active */
+.code-entity-node-container.node-highlighted.line-highlighted {
+  border-color: #9333EA;
+  box-shadow: 
+    0 0 0 2px #FFC107,
+    0 0 0 4px #FF6B6B,
+    0 10px 25px rgba(147, 51, 234, 0.4);
+}
+
+/* Adjust indicators when both are active */
+.code-entity-node-container.node-highlighted.line-highlighted .code-entity-node-parent-indicator,
+.code-entity-node-container.node-highlighted.line-highlighted .code-entity-node-line-indicator {
+  animation: pulse-dual 1s ease-in-out infinite;
+}
+
+@keyframes pulse-dual {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(0.97);
+    filter: brightness(1.1);
+  }
+}

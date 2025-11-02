@@ -9,7 +9,6 @@ export function activate(context: vscode.ExtensionContext) {
   Logger.initialize(LogLevel.DEBUG);
 
   const flowManager = FlowManager.initialize(context);
-  Logger.debug("[Extension] FlowManager initialized");
   const goParser = new GoParser();
   const flowTreeProvider = new FlowTreeDataProvider(flowManager);
 
@@ -43,10 +42,7 @@ export function activate(context: vscode.ExtensionContext) {
             cancellable: false,
           },
           async (progress) => {
-            Logger.debug("[Extension] Progress started");
             progress.report({ increment: 0, message: "Loading functions..." });
-            // Step 1: Lấy danh sách functions từ file hiện tại
-            Logger.debug("[Extension] Step 1: Getting functions from document");
             const functions = await getFunctionsFromDocument(editor.document);
 
             if (functions.length === 0) {
@@ -58,10 +54,7 @@ export function activate(context: vscode.ExtensionContext) {
             }
 
             progress.report({ increment: 20 });
-            Logger.debug("[Extension] Step 1 completed (20%)");
 
-            // Step 2: Cho phép user chọn function làm root
-            Logger.debug("[Extension] Step 2: Showing function picker");
             const selectedFunction = await vscode.window.showQuickPick(
               functions.map((fn) => ({
                 label: `${fn.type === "function" ? "𝑓" : "ⓜ"} ${fn.name}`,
@@ -76,7 +69,6 @@ export function activate(context: vscode.ExtensionContext) {
             );
 
             if (!selectedFunction) {
-              Logger.debug("[Extension] User cancelled function selection");
               return;
             }
 
