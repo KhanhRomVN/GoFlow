@@ -10,97 +10,98 @@ export class GoParser {
       const edges: Edge[] = [];
       const edgeMap = new Map<string, Set<string>>();
 
-      // === PASS 1: Chỉ tạo FunctionNode (functions/methods) ===
+      // === PASS 1: Tạo TẤT CẢ nodes (FunctionNode + DeclarationNode) ===
+      const functionNodes: Node[] = [];
+      const declarationSymbols: vscode.DocumentSymbol[] = [];
+
       for (const symbol of symbols) {
+        // Tạo FunctionNode
         if (this.isFunctionOrMethod(symbol)) {
-          // Bỏ qua nested functions
           const parentSymbol = this.findParentSymbol(symbols, symbol);
           if (parentSymbol && this.isFunctionOrMethod(parentSymbol)) {
-            continue;
+            continue; // Bỏ qua nested functions
           }
 
           const node = this.createNodeFromSymbol(symbol, document);
+          functionNodes.push(node);
           nodes.push(node);
         }
+        // Thu thập DeclarationSymbols
+        else if (this.isDeclaration(symbol)) {
+          declarationSymbols.push(symbol);
+        }
       }
-
-      // NOTE: DeclarationNodes sẽ được tạo động trong PASS 2 dựa trên usage
 
       // Tạo node map để lookup nhanh
       const nodeMap = new Map<string, Node>();
       nodes.forEach((node) => nodeMap.set(node.id, node));
 
-      // === PASS 2: Tạo edges + DeclarationNodes động ===
+      // === PASS 2: Tạo edges + track declaration usage ===
       const declarationUsageMap = new Map<string, Set<string>>(); // declarationId -> Set<functionId>
 
-      for (const symbol of symbols) {
-        if (this.isFunctionOrMethod(symbol)) {
-          // Bỏ qua nested functions
-          const parentSymbol = this.findParentSymbol(symbols, symbol);
-          if (parentSymbol && this.isFunctionOrMethod(parentSymbol)) {
-            continue;
+      for (const functionNode of functionNodes) {
+        const symbol = symbols.find((s) => {
+          const nodeType = this.getNodeType(s.kind);
+          const cleanName = this.extractCleanFunctionName(s.name);
+          const id = `${nodeType}_${cleanName}`;
+          return id === functionNode.id && this.isFunctionOrMethod(s);
+        });
+
+        if (!symbol) continue;
+
+        // Tìm function calls
+        const callees = await this.findFunctionCallsWithReturnUsage(
+          document,
+          symbol,
+          nodeMap
+        );
+
+        for (const callee of callees) {
+          const edgeKey = `${functionNode.id}->${callee.target}`;
+          if (!edgeMap.has(functionNode.id)) {
+            edgeMap.set(functionNode.id, new Set());
           }
 
-          const nodeType = this.getNodeType(symbol.kind);
-          const cleanName = this.extractCleanFunctionName(symbol.name);
-          const nodeId = `${nodeType}_${cleanName}`;
-
-          // Tìm function calls (edges thông thường)
-          const callees = await this.findFunctionCallsWithReturnUsage(
-            document,
-            symbol,
-            nodeMap
-          );
-
-          for (const callee of callees) {
-            const edgeKey = `${nodeId}->${callee.target}`;
-            if (!edgeMap.has(nodeId)) {
-              edgeMap.set(nodeId, new Set());
-            }
-
-            if (!edgeMap.get(nodeId)!.has(callee.target)) {
-              edges.push({
-                source: nodeId,
-                target: callee.target,
-                type: "calls",
-                hasReturnValue: callee.usesReturnValue,
-              });
-              edgeMap.get(nodeId)!.add(callee.target);
-            }
+          if (!edgeMap.get(functionNode.id)!.has(callee.target)) {
+            edges.push({
+              source: functionNode.id,
+              target: callee.target,
+              type: "calls",
+              hasReturnValue: callee.usesReturnValue,
+            });
+            edgeMap.get(functionNode.id)!.add(callee.target);
           }
+        }
 
-          // Tìm declaration usages
-          const declarations = await this.findDeclarationUsages(
-            document,
-            symbol,
-            symbols
-          );
+        // Tìm declaration usages
+        const declarations = await this.findDeclarationUsages(
+          document,
+          symbol,
+          declarationSymbols
+        );
 
-          for (const { declarationSymbol, usageCount } of declarations) {
-            const declType = this.getNodeType(declarationSymbol.kind);
-            const declId = `${declType}_${declarationSymbol.name}`;
+        for (const { declarationSymbol } of declarations) {
+          const declType = this.getNodeType(declarationSymbol.kind);
+          const declId = `${declType}_${declarationSymbol.name}`;
 
-            // Track usage relationship
-            if (!declarationUsageMap.has(declId)) {
-              declarationUsageMap.set(declId, new Set());
-            }
-            declarationUsageMap.get(declId)!.add(nodeId);
+          if (!declarationUsageMap.has(declId)) {
+            declarationUsageMap.set(declId, new Set());
           }
+          declarationUsageMap.get(declId)!.add(functionNode.id);
         }
       }
 
-      // Tạo DeclarationNodes dựa trên usage (N copies nếu được N functions sử dụng)
+      // === PASS 3: Tạo DeclarationNodes dựa trên usage ===
       let declarationIndex = 0;
       declarationUsageMap.forEach((usedByFunctions, baseDeclarationId) => {
-        const declarationSymbol = symbols.find((s) => {
+        const declarationSymbol = declarationSymbols.find((s) => {
           const type = this.getNodeType(s.kind);
           const id = `${type}_${s.name}`;
-          return id === baseDeclarationId && this.isDeclaration(s);
+          return id === baseDeclarationId;
         });
 
         if (!declarationSymbol) return;
 
-        // Tạo N DeclarationNodes (1 cho mỗi function sử dụng)
         usedByFunctions.forEach((functionId) => {
           const uniqueDeclarationId = `${baseDeclarationId}_usage_${declarationIndex++}`;
 
@@ -109,7 +110,6 @@ export class GoParser {
             document
           );
 
-          // Override ID và thêm metadata
           declarationNode.id = uniqueDeclarationId;
           (declarationNode as any).usedBy = [functionId];
           (declarationNode as any).baseDeclarationId = baseDeclarationId;
@@ -117,7 +117,6 @@ export class GoParser {
           nodes.push(declarationNode);
           nodeMap.set(uniqueDeclarationId, declarationNode);
 
-          // Tạo edge: FunctionNode -> DeclarationNode
           edges.push({
             source: functionId,
             target: uniqueDeclarationId,
@@ -126,13 +125,14 @@ export class GoParser {
         });
       });
 
+      // Validate edges
       const validNodeIds = new Set(nodes.map((n) => n.id));
       const validEdges = edges.filter((edge) => {
         const isValid =
           validNodeIds.has(edge.source) && validNodeIds.has(edge.target);
         if (!isValid) {
           Logger.error(
-            `Removed invalid edge: ${edge.source} -> ${edge.target} (target not in current file)`
+            `Removed invalid edge: ${edge.source} -> ${edge.target}`
           );
         }
         return isValid;
@@ -353,7 +353,7 @@ export class GoParser {
   private async findDeclarationUsages(
     document: vscode.TextDocument,
     symbol: vscode.DocumentSymbol,
-    allSymbols: vscode.DocumentSymbol[]
+    declarationSymbols: vscode.DocumentSymbol[]
   ): Promise<
     Array<{ declarationSymbol: vscode.DocumentSymbol; usageCount: number }>
   > {
@@ -375,9 +375,9 @@ export class GoParser {
       while ((match = typeUsageRegex.exec(line)) !== null) {
         const typeName = match[1];
 
-        // Tìm declaration symbol với tên này
-        const declarationSymbol = allSymbols.find(
-          (s) => this.isDeclaration(s) && s.name === typeName
+        // Tìm declaration symbol với tên này trong declarationSymbols
+        const declarationSymbol = declarationSymbols.find(
+          (s) => s.name === typeName
         );
 
         if (declarationSymbol) {
@@ -407,93 +407,6 @@ export class GoParser {
     );
   }
 
-  async parseFileWithDependencies(
-    document: vscode.TextDocument
-  ): Promise<GraphData> {
-    try {
-      // Step 1: Parse file hiện tại để lấy nodes và tìm external calls
-      const currentFileData = await this.parseFile(document);
-      const allNodes = new Map<string, Node>();
-      const allEdges: Edge[] = [];
-      const edgeMap = new Map<string, Set<string>>();
-
-      // Thêm nodes từ file hiện tại
-      currentFileData.nodes.forEach((node) => {
-        allNodes.set(node.id, node);
-      });
-
-      // Thêm edges từ file hiện tại
-      currentFileData.edges.forEach((edge) => {
-        allEdges.push(edge);
-        if (!edgeMap.has(edge.source)) {
-          edgeMap.set(edge.source, new Set());
-        }
-        edgeMap.get(edge.source)!.add(edge.target);
-      });
-
-      // Step 2: Tìm tất cả external calls từ file hiện tại
-      const externalFiles = await this.findDirectDependencies(document);
-
-      // Step 3: Parse các external files để lấy function definitions
-      for (const filePath of externalFiles) {
-        try {
-          const extUri = vscode.Uri.file(filePath);
-          const extDoc = await vscode.workspace.openTextDocument(extUri);
-          const extSymbols = await this.getDocumentSymbols(extDoc);
-
-          for (const symbol of extSymbols) {
-            if (this.isFunctionOrMethod(symbol)) {
-              const node = this.createNodeFromSymbol(symbol, extDoc);
-              if (!allNodes.has(node.id)) {
-                allNodes.set(node.id, node);
-              }
-            }
-          }
-        } catch (error) {
-          Logger.error(`Failed to parse external file: ${filePath}`, error);
-        }
-      }
-
-      // Step 4: Re-analyze calls từ file hiện tại với đầy đủ node map
-      for (const symbol of await this.getDocumentSymbols(document)) {
-        if (this.isFunctionOrMethod(symbol)) {
-          const node = this.createNodeFromSymbol(symbol, document);
-          const callees = await this.findFunctionCallsWithNodeMap(
-            document,
-            symbol,
-            allNodes
-          );
-
-          for (const callee of callees) {
-            const edgeKey = `${node.id}->${callee.target}`;
-
-            if (!edgeMap.has(node.id)) {
-              edgeMap.set(node.id, new Set());
-            }
-
-            if (!edgeMap.get(node.id)!.has(callee.target)) {
-              allEdges.push({
-                source: node.id,
-                target: callee.target,
-                type: "calls",
-              });
-              edgeMap.get(node.id)!.add(callee.target);
-            }
-          }
-        }
-      }
-
-      return {
-        nodes: Array.from(allNodes.values()),
-        edges: allEdges,
-        fileName: document.fileName,
-      };
-    } catch (error) {
-      Logger.error("Failed to parse file with dependencies", error);
-      throw error;
-    }
-  }
-
   async parseFunctionWithDependencies(
     document: vscode.TextDocument,
     functionInfo: { name: string; symbol: vscode.DocumentSymbol }
@@ -507,6 +420,7 @@ export class GoParser {
         symbol: vscode.DocumentSymbol;
         document: vscode.TextDocument;
       }> = [];
+      const declarationUsageMap = new Map<string, Set<string>>();
 
       // Step 1: Thêm root function vào queue
       const rootNode = this.createNodeFromSymbol(functionInfo.symbol, document);
@@ -514,12 +428,18 @@ export class GoParser {
       functionQueue.push({ symbol: functionInfo.symbol, document });
       visitedFiles.add(document.uri.fsPath);
 
-      // Step 2: BFS để traverse tất cả dependencies
+      // Step 2: BFS để traverse tất cả function dependencies
       while (functionQueue.length > 0) {
         const { symbol, document: currentDoc } = functionQueue.shift()!;
         const currentNode = this.createNodeFromSymbol(symbol, currentDoc);
 
-        // Tìm tất cả function calls trong function hiện tại
+        // Get all symbols from current document
+        const currentDocSymbols = await this.getDocumentSymbols(currentDoc);
+        const declarationSymbols = currentDocSymbols.filter((s) =>
+          this.isDeclaration(s)
+        );
+
+        // Tìm function calls
         const callees = await this.findFunctionCallsForTraversal(
           currentDoc,
           symbol
@@ -549,11 +469,73 @@ export class GoParser {
             );
             allNodes.set(targetNode.id, targetNode);
 
-            // Thêm vào queue để tiếp tục traverse
             functionQueue.push({
               symbol: callee.targetSymbol,
               document: callee.targetDocument,
             });
+          }
+        }
+
+        // Tìm declaration usages
+        const declarations = await this.findDeclarationUsages(
+          currentDoc,
+          symbol,
+          declarationSymbols
+        );
+
+        for (const { declarationSymbol } of declarations) {
+          const declType = this.getNodeType(declarationSymbol.kind);
+          const declId = `${declType}_${declarationSymbol.name}`;
+
+          if (!declarationUsageMap.has(declId)) {
+            declarationUsageMap.set(declId, new Set());
+          }
+          declarationUsageMap.get(declId)!.add(currentNode.id);
+        }
+      }
+
+      // Step 3: Tạo DeclarationNodes dựa trên usage
+      let declarationIndex = 0;
+      for (const [baseDeclarationId, usedByFunctions] of declarationUsageMap) {
+        // Tìm declarationSymbol từ visited documents
+        for (const filePath of visitedFiles) {
+          try {
+            const fileUri = vscode.Uri.file(filePath);
+            const fileDoc = await vscode.workspace.openTextDocument(fileUri);
+            const fileSymbols = await this.getDocumentSymbols(fileDoc);
+
+            const declarationSymbol = fileSymbols.find((s) => {
+              const type = this.getNodeType(s.kind);
+              const id = `${type}_${s.name}`;
+              return id === baseDeclarationId && this.isDeclaration(s);
+            });
+
+            if (declarationSymbol) {
+              usedByFunctions.forEach((functionId) => {
+                const uniqueDeclarationId = `${baseDeclarationId}_usage_${declarationIndex++}`;
+
+                const declarationNode = this.createNodeFromSymbol(
+                  declarationSymbol,
+                  fileDoc
+                );
+
+                declarationNode.id = uniqueDeclarationId;
+                (declarationNode as any).usedBy = [functionId];
+                (declarationNode as any).baseDeclarationId = baseDeclarationId;
+
+                allNodes.set(uniqueDeclarationId, declarationNode);
+
+                allEdges.push({
+                  source: functionId,
+                  target: uniqueDeclarationId,
+                  type: "uses",
+                });
+              });
+
+              break; // Found declaration, no need to search other files
+            }
+          } catch (error) {
+            Logger.error(`Failed to process file: ${filePath}`, error);
           }
         }
       }
@@ -814,14 +796,6 @@ export class GoParser {
     );
   }
 
-  private isTypeOrInterface(symbol: vscode.DocumentSymbol): boolean {
-    return (
-      symbol.kind === vscode.SymbolKind.Struct ||
-      symbol.kind === vscode.SymbolKind.Interface ||
-      symbol.kind === vscode.SymbolKind.Class
-    );
-  }
-
   private createNodeFromSymbol(
     symbol: vscode.DocumentSymbol,
     document: vscode.TextDocument,
@@ -996,77 +970,6 @@ export class GoParser {
     }
   }
 
-  private async findFunctionCallsWithLSP(
-    document: vscode.TextDocument,
-    symbol: vscode.DocumentSymbol
-  ): Promise<Array<{ target: string }>> {
-    const callees: Array<{ target: string }> = [];
-    const text = document.getText(symbol.range);
-    const lines = text.split("\n");
-
-    const functionCallRegex = /\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
-
-    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-      if (lineIndex === 0) {
-        continue;
-      }
-
-      const line = lines[lineIndex];
-      let match;
-
-      while ((match = functionCallRegex.exec(line)) !== null) {
-        const functionName = match[1];
-        const charIndex = match.index;
-
-        const absoluteLine = symbol.range.start.line + lineIndex;
-        const position = new vscode.Position(absoluteLine, charIndex);
-
-        try {
-          const definitions = await vscode.commands.executeCommand<
-            vscode.Location[]
-          >("vscode.executeDefinitionProvider", document.uri, position);
-
-          if (definitions && definitions.length > 0) {
-            const def = definitions[0];
-
-            if (def.uri.fsPath === document.fileName) {
-              const defSymbols = await vscode.commands.executeCommand<
-                vscode.DocumentSymbol[]
-              >("vscode.executeDocumentSymbolProvider", def.uri);
-
-              if (defSymbols) {
-                const targetSymbol = this.findSymbolAtPosition(
-                  defSymbols,
-                  def.range.start
-                );
-
-                if (targetSymbol && this.isFunctionOrMethod(targetSymbol)) {
-                  const targetType = this.getNodeType(targetSymbol.kind);
-                  const targetId = `${targetType}_${targetSymbol.name}`;
-
-                  const sourceType = this.getNodeType(symbol.kind);
-                  const sourceId = `${sourceType}_${symbol.name}`;
-
-                  if (targetId !== sourceId) {
-                    callees.push({ target: targetId });
-                  }
-                }
-              }
-            } else {
-              Logger.error(
-                `External call detected: ${functionName} (in ${def.uri.fsPath})`
-              );
-            }
-          }
-        } catch (error) {
-          Logger.error(`Could not resolve definition for: ${functionName}`);
-        }
-      }
-    }
-
-    return callees;
-  }
-
   private findSymbolAtPosition(
     symbols: vscode.DocumentSymbol[],
     position: vscode.Position
@@ -1086,146 +989,5 @@ export class GoParser {
       }
     }
     return undefined;
-  }
-
-  async parseMultipleFiles(
-    documents: vscode.TextDocument[]
-  ): Promise<GraphData> {
-    const allNodes: Node[] = [];
-    const allEdges: Edge[] = [];
-    const nodeMap = new Map<string, Node>();
-    const edgeMap = new Map<string, Set<string>>();
-
-    // Step 1: Parse tất cả files để lấy nodes
-    for (const doc of documents) {
-      try {
-        const symbols = await this.getDocumentSymbols(doc);
-
-        for (const symbol of symbols) {
-          if (this.isFunctionOrMethod(symbol)) {
-            const node = this.createNodeFromSymbol(symbol, doc);
-            if (!nodeMap.has(node.id)) {
-              nodeMap.set(node.id, node);
-              allNodes.push(node);
-            }
-          }
-        }
-      } catch (error) {
-        Logger.error(`Failed to parse file: ${doc.fileName}`, error);
-      }
-    }
-
-    // Step 2: Tìm edges (bao gồm cross-file calls)
-    for (const doc of documents) {
-      try {
-        const symbols = await this.getDocumentSymbols(doc);
-
-        for (const symbol of symbols) {
-          if (this.isFunctionOrMethod(symbol)) {
-            const node = this.createNodeFromSymbol(symbol, doc);
-            const callees = await this.findFunctionCallsCrossFile(
-              doc,
-              symbol,
-              nodeMap
-            );
-
-            for (const callee of callees) {
-              if (!edgeMap.has(node.id)) {
-                edgeMap.set(node.id, new Set());
-              }
-
-              if (!edgeMap.get(node.id)!.has(callee.target)) {
-                allEdges.push({
-                  source: node.id,
-                  target: callee.target,
-                  type: "calls",
-                });
-                edgeMap.get(node.id)!.add(callee.target);
-              }
-            }
-          }
-        }
-      } catch (error) {
-        Logger.error(`Failed to analyze calls in file: ${doc.fileName}`, error);
-      }
-    }
-
-    return {
-      nodes: allNodes,
-      edges: allEdges,
-      fileName: documents[0].fileName,
-    };
-  }
-
-  private async findFunctionCallsCrossFile(
-    document: vscode.TextDocument,
-    symbol: vscode.DocumentSymbol,
-    nodeMap: Map<string, Node>
-  ): Promise<Array<{ target: string; crossFile: boolean }>> {
-    const callees: Array<{ target: string; crossFile: boolean }> = [];
-    const text = document.getText(symbol.range);
-    const lines = text.split("\n");
-
-    const functionCallRegex = /\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
-
-    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-      const line = lines[lineIndex];
-      let match;
-
-      while ((match = functionCallRegex.exec(line)) !== null) {
-        const functionName = match[1];
-        const charIndex = match.index;
-
-        const absoluteLine = symbol.range.start.line + lineIndex;
-        const position = new vscode.Position(absoluteLine, charIndex);
-
-        try {
-          const definitions = await vscode.commands.executeCommand<
-            vscode.Location[]
-          >("vscode.executeDefinitionProvider", document.uri, position);
-
-          if (definitions && definitions.length > 0) {
-            const def = definitions[0];
-            const isCrossFile = def.uri.fsPath !== document.fileName;
-
-            try {
-              const defDocument = await vscode.workspace.openTextDocument(
-                def.uri
-              );
-              const defSymbols = await vscode.commands.executeCommand<
-                vscode.DocumentSymbol[]
-              >("vscode.executeDocumentSymbolProvider", def.uri);
-
-              if (defSymbols) {
-                const targetSymbol = this.findSymbolAtPosition(
-                  defSymbols,
-                  def.range.start
-                );
-
-                if (targetSymbol && this.isFunctionOrMethod(targetSymbol)) {
-                  const targetType = this.getNodeType(targetSymbol.kind);
-                  const targetId = `${targetType}_${targetSymbol.name}`;
-
-                  const sourceType = this.getNodeType(symbol.kind);
-                  const sourceId = `${sourceType}_${symbol.name}`;
-
-                  if (nodeMap.has(targetId) && targetId !== sourceId) {
-                    callees.push({ target: targetId, crossFile: isCrossFile });
-                  }
-                }
-              }
-            } catch (error) {
-              Logger.error(
-                `Could not open or analyze target file: ${def.uri.fsPath}`
-              );
-            }
-          }
-        } catch (error) {
-          Logger.error(`Could not resolve definition for: ${functionName}`);
-        }
-      }
-    }
-
-    return callees;
   }
 }
