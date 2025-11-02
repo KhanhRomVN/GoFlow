@@ -1047,12 +1047,21 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               return !hiddenNodeIds.has(n.id);
             }
 
-            // DeclarationNode: always visible (không bị ảnh hưởng bởi hiddenNodeIds)
             if (n.type === "declarationNode") {
-              return true;
+              const declData = n.data as DeclarationNodeData;
+
+              if (!declData.usedBy || declData.usedBy.length === 0) {
+                return false;
+              }
+
+              const hasVisibleCaller = declData.usedBy.some((callerId) => {
+                const callerNode = nodes.find((node) => node.id === callerId);
+                return callerNode && !hiddenNodeIds.has(callerId);
+              });
+
+              return hasVisibleCaller;
             }
 
-            // Filter FileGroupContainer: chỉ hiển thị nếu có ít nhất 1 node visible bên trong
             if (n.type === "fileGroupContainer") {
               const containerFile = (n.data as any).fileName;
               const visibleNodesInContainer = nodes.filter(

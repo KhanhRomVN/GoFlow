@@ -110,6 +110,12 @@ function placeDeclarationNodesNearCallers(
             x: callerNode.position.x + CODE_NODE_WIDTH + offsetX,
             y: callerNode.position.y + offsetY,
           },
+          zIndex: 10,
+          style: {
+            ...declNode.style,
+            width: 350,
+            height: 200,
+          },
         });
         return;
       }

@@ -74,33 +74,88 @@ export class GoParser {
         }
 
         // Tìm declaration usages
+        Logger.debug(
+          `[parseFile PASS2] Processing function: ${functionNode.id}`
+        );
+
         const declarations = await this.findDeclarationUsages(
           document,
           symbol,
           declarationSymbols
         );
 
-        for (const { declarationSymbol } of declarations) {
+        Logger.debug(
+          `[parseFile PASS2] Found ${declarations.length} declaration usages for ${functionNode.id}`
+        );
+
+        for (const { declarationSymbol, usageCount } of declarations) {
           const declType = this.getNodeType(declarationSymbol.kind);
           const declId = `${declType}_${declarationSymbol.name}`;
+
+          Logger.debug(
+            `[parseFile PASS2] Processing declaration: ${declId} (usageCount: ${usageCount})`
+          );
 
           if (!declarationUsageMap.has(declId)) {
             declarationUsageMap.set(declId, new Set());
           }
           declarationUsageMap.get(declId)!.add(functionNode.id);
+
+          // ✅ LƯU THÔNG TIN DECLARATION SYMBOL ĐỂ TẠO NODE SAU
+          const symbolKey = `${declId}_symbol`;
+          if (!declarationUsageMap.has(symbolKey)) {
+            (declarationUsageMap as any).set(symbolKey, declarationSymbol);
+            Logger.debug(
+              `[parseFile PASS2] ✅ Saved symbol: "${symbolKey}" (name: ${declarationSymbol.name})`
+            );
+          } else {
+            Logger.debug(
+              `[parseFile PASS2] ⚠️ Symbol already exists: "${symbolKey}"`
+            );
+          }
         }
       }
 
       // === PASS 3: Tạo DeclarationNodes dựa trên usage ===
-      let declarationIndex = 0;
-      declarationUsageMap.forEach((usedByFunctions, baseDeclarationId) => {
-        const declarationSymbol = declarationSymbols.find((s) => {
-          const type = this.getNodeType(s.kind);
-          const id = `${type}_${s.name}`;
-          return id === baseDeclarationId;
-        });
+      Logger.debug(
+        `[parseFile PASS3] declarationUsageMap size: ${declarationUsageMap.size}`
+      );
 
-        if (!declarationSymbol) return;
+      const symbolStorage = new Map<string, vscode.DocumentSymbol>();
+      const usageStorage = new Map<string, Set<string>>();
+
+      declarationUsageMap.forEach((value, key) => {
+        if (key.endsWith("_symbol")) {
+          const baseKey = key.replace("_symbol", "");
+          symbolStorage.set(baseKey, value as any);
+          Logger.debug(`[parseFile PASS3] Stored symbol for: ${baseKey}`);
+        } else if (value instanceof Set) {
+          usageStorage.set(key, value);
+          Logger.debug(
+            `[parseFile PASS3] Stored usages for: ${key} (${value.size} functions)`
+          );
+        }
+      });
+
+      Logger.debug(
+        `[parseFile PASS3] symbolStorage size: ${symbolStorage.size}`
+      );
+      Logger.debug(`[parseFile PASS3] usageStorage size: ${usageStorage.size}`);
+
+      let declarationIndex = 0;
+      usageStorage.forEach((usedByFunctions, baseDeclarationId) => {
+        const declarationSymbol = symbolStorage.get(baseDeclarationId);
+
+        if (!declarationSymbol) {
+          Logger.warn(
+            `[parseFile PASS3] ❌ Symbol not found for "${baseDeclarationId}"`
+          );
+          return;
+        }
+
+        Logger.debug(
+          `[parseFile PASS3] ✅ Processing: ${baseDeclarationId} (used by ${usedByFunctions.size} functions)`
+        );
 
         usedByFunctions.forEach((functionId) => {
           const uniqueDeclarationId = `${baseDeclarationId}_usage_${declarationIndex++}`;
@@ -122,8 +177,16 @@ export class GoParser {
             target: uniqueDeclarationId,
             type: "uses",
           });
+
+          Logger.debug(
+            `[parseFile PASS3] ✅ Created DeclarationNode: ${uniqueDeclarationId} for ${functionId}`
+          );
         });
       });
+
+      Logger.debug(
+        `[parseFile PASS3] FINAL - Created ${declarationIndex} DeclarationNodes`
+      );
 
       // Validate edges
       const validNodeIds = new Set(nodes.map((n) => n.id));
@@ -350,6 +413,22 @@ export class GoParser {
     return undefined;
   }
 
+  /**
+   * Extract receiver type from Go method signature
+   * Example: "(*CourseBookHandler).Create" -> "CourseBookHandler"
+   */
+  private extractReceiverType(functionName: string): string | null {
+    // Pattern: (*Type).MethodName hoặc (Type).MethodName
+    const methodPattern = /^\((\*?)([A-Z][a-zA-Z0-9_]*)\)\./;
+    const match = functionName.match(methodPattern);
+
+    if (match) {
+      return match[2]; // Trả về tên type (bỏ qua dấu *)
+    }
+
+    return null;
+  }
+
   private async findDeclarationUsages(
     document: vscode.TextDocument,
     symbol: vscode.DocumentSymbol,
@@ -357,16 +436,38 @@ export class GoParser {
   ): Promise<
     Array<{ declarationSymbol: vscode.DocumentSymbol; usageCount: number }>
   > {
+    Logger.debug(
+      `[findDeclarationUsages] START - Function: ${symbol.name} in ${document.fileName}`
+    );
+
+    // ✅ BƯỚC 1: Lấy receiver type (nếu là method) để filter ra khỏi detection
+    const receiverType = this.extractReceiverType(symbol.name);
+
     const usages: Map<
       string,
-      { symbol: vscode.DocumentSymbol; count: number }
+      {
+        symbol: vscode.DocumentSymbol;
+        count: number;
+        document: vscode.TextDocument;
+      }
     > = new Map();
 
     const text = document.getText(symbol.range);
     const lines = text.split("\n");
 
-    // Pattern để detect type usage: var x Type, func() Type, Type{}, etc.
+    // ✅ Regex cải tiến: CHỈ match type declarations trong valid contexts
+    // Valid contexts:
+    // 1. var/const declaration: var req CreateCourseBookRequest
+    // 2. Short var declaration: req := courseDTO.CreateCourseBookRequest{...}
+    // 3. Type assertion: value.(*CourseBook)
+    // 4. Composite literal: &courseModel.CourseBook{...}
+    // 5. Function parameters/return (đã có ở signature)
     const typeUsageRegex = /\b([A-Z][a-zA-Z0-9_]*)\b/g;
+
+    let totalMatches = 0;
+    let resolvedDefinitions = 0;
+    let validDeclarations = 0;
+    let skippedFieldAssignments = 0;
 
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
       const line = lines[lineIndex];
@@ -374,28 +475,179 @@ export class GoParser {
 
       while ((match = typeUsageRegex.exec(line)) !== null) {
         const typeName = match[1];
+        const charIndex = match.index;
+        totalMatches++;
 
-        // Tìm declaration symbol với tên này trong declarationSymbols
-        const declarationSymbol = declarationSymbols.find(
-          (s) => s.name === typeName
+        // ✅ BƯỚC 2.1: Bỏ qua receiver type (nếu là method)
+        if (receiverType && typeName === receiverType) {
+          Logger.debug(
+            `[findDeclarationUsages] ⚠️ SKIP: "${typeName}" is receiver type of method "${symbol.name}"`
+          );
+          continue;
+        }
+
+        // ✅ BƯỚC 2.2: Filter out struct field assignments
+        // Pattern: "FieldName: value" (có dấu : ngay sau)
+        const afterMatch = line.substring(charIndex + typeName.length).trim();
+        if (afterMatch.startsWith(":")) {
+          skippedFieldAssignments++;
+          Logger.debug(
+            `[findDeclarationUsages] ⚠️ SKIP: "${typeName}" is struct field assignment at line ${lineIndex}, char ${charIndex}`
+          );
+          continue;
+        }
+
+        // ✅ BƯỚC 2.3: Bỏ qua isolated field names (không có context)
+        const beforeMatch = line.substring(0, charIndex).trim();
+
+        // Nếu trước đó chỉ có whitespace/tab → có thể là field assignment
+        if (beforeMatch === "" || /^[\s\t]*$/.test(beforeMatch)) {
+          // Check xem sau có phải là `:` không (field assignment pattern)
+          if (afterMatch.startsWith(":")) {
+            skippedFieldAssignments++;
+            continue;
+          }
+        }
+
+        // ✅ BƯỚC 2: Bỏ qua receiver type (nếu là method)
+        if (receiverType && typeName === receiverType) {
+          Logger.debug(
+            `[findDeclarationUsages] ⚠️ SKIP: "${typeName}" is receiver type of method "${symbol.name}"`
+          );
+          continue;
+        }
+
+        Logger.debug(
+          `[findDeclarationUsages] Match #${totalMatches}: "${typeName}" at line ${lineIndex}, char ${charIndex}`
         );
 
-        if (declarationSymbol) {
-          const key = `${declarationSymbol.kind}_${declarationSymbol.name}`;
+        // Calculate absolute position in document
+        const absoluteLine = symbol.range.start.line + lineIndex;
+        const position = new vscode.Position(absoluteLine, charIndex);
 
-          if (!usages.has(key)) {
-            usages.set(key, { symbol: declarationSymbol, count: 0 });
+        try {
+          // ✅ DÙNG DEFINITION PROVIDER ĐỂ RESOLVE CROSS-FILE
+          const definitions = await vscode.commands.executeCommand<
+            vscode.Location[]
+          >("vscode.executeDefinitionProvider", document.uri, position);
+
+          if (definitions && definitions.length > 0) {
+            resolvedDefinitions++;
+            const def = definitions[0];
+            const defFilePath = def.uri.fsPath;
+
+            Logger.debug(
+              `[findDeclarationUsages] ✅ Resolved "${typeName}" -> ${defFilePath}:${
+                def.range.start.line + 1
+              }`
+            );
+
+            // Bỏ qua stdlib và vendor
+            if (
+              defFilePath.includes("/usr/local/go/") ||
+              defFilePath.includes("/go/pkg/mod/") ||
+              defFilePath.includes("\\go\\pkg\\mod\\") ||
+              defFilePath.includes("/vendor/") ||
+              !defFilePath.endsWith(".go")
+            ) {
+              Logger.debug(
+                `[findDeclarationUsages] ⚠️ SKIP: "${typeName}" is stdlib/vendor`
+              );
+              continue;
+            }
+
+            // Open target file và lấy symbols
+            const defDocument = await vscode.workspace.openTextDocument(
+              def.uri
+            );
+            const defSymbols = await vscode.commands.executeCommand<
+              vscode.DocumentSymbol[]
+            >("vscode.executeDocumentSymbolProvider", def.uri);
+
+            if (defSymbols) {
+              const targetSymbol = this.findSymbolAtPosition(
+                defSymbols,
+                def.range.start
+              );
+
+              if (targetSymbol) {
+                Logger.debug(
+                  `[findDeclarationUsages] Found symbol: "${
+                    targetSymbol.name
+                  }" (kind: ${vscode.SymbolKind[targetSymbol.kind]})`
+                );
+
+                // ✅ VERIFY: CHỈ TRACK DECLARATIONS (struct, interface, class, enum, type)
+                if (this.isDeclaration(targetSymbol)) {
+                  validDeclarations++;
+                  const key = `${targetSymbol.kind}_${targetSymbol.name}`;
+
+                  Logger.debug(
+                    `[findDeclarationUsages] ✅ VALID DECLARATION: "${
+                      targetSymbol.name
+                    }" (kind: ${
+                      vscode.SymbolKind[targetSymbol.kind]
+                    }, key: ${key})`
+                  );
+
+                  if (!usages.has(key)) {
+                    usages.set(key, {
+                      symbol: targetSymbol,
+                      count: 0,
+                      document: defDocument,
+                    });
+                  }
+
+                  usages.get(key)!.count++;
+                } else {
+                  Logger.debug(
+                    `[findDeclarationUsages] ❌ NOT a declaration: "${
+                      targetSymbol.name
+                    }" (kind: ${vscode.SymbolKind[targetSymbol.kind]})`
+                  );
+                }
+              } else {
+                Logger.warn(
+                  `[findDeclarationUsages] ⚠️ Could not find symbol at position for "${typeName}"`
+                );
+              }
+            } else {
+              Logger.warn(
+                `[findDeclarationUsages] ⚠️ No symbols found in file: ${defFilePath}`
+              );
+            }
+          } else {
+            Logger.debug(
+              `[findDeclarationUsages] ❌ No definition found for "${typeName}"`
+            );
           }
-
-          usages.get(key)!.count++;
+        } catch (error) {
+          Logger.error(
+            `[findDeclarationUsages] ERROR resolving "${typeName}":`,
+            error
+          );
         }
       }
     }
 
-    return Array.from(usages.values()).map((usage) => ({
+    Logger.debug(`[findDeclarationUsages] SUMMARY for ${symbol.name}:`, {
+      totalMatches,
+      resolvedDefinitions,
+      validDeclarations,
+      usagesFound: usages.size,
+      skippedFieldAssignments,
+    });
+
+    const result = Array.from(usages.values()).map((usage) => ({
       declarationSymbol: usage.symbol,
       usageCount: usage.count,
     }));
+
+    Logger.debug(
+      `[findDeclarationUsages] END - Returning ${result.length} declaration usages`
+    );
+
+    return result;
   }
 
   private isDeclaration(symbol: vscode.DocumentSymbol): boolean {
@@ -421,6 +673,10 @@ export class GoParser {
         document: vscode.TextDocument;
       }> = [];
       const declarationUsageMap = new Map<string, Set<string>>();
+      const declarationSymbolMap = new Map<
+        string,
+        { symbol: vscode.DocumentSymbol; document: vscode.TextDocument }
+      >();
 
       // Step 1: Thêm root function vào queue
       const rootNode = this.createNodeFromSymbol(functionInfo.symbol, document);
@@ -476,7 +732,7 @@ export class GoParser {
           }
         }
 
-        // Tìm declaration usages
+        // Tìm declaration usages (bây giờ hỗ trợ cross-file)
         const declarations = await this.findDeclarationUsages(
           currentDoc,
           symbol,
@@ -491,54 +747,71 @@ export class GoParser {
             declarationUsageMap.set(declId, new Set());
           }
           declarationUsageMap.get(declId)!.add(currentNode.id);
+
+          if (!declarationSymbolMap.has(declId)) {
+            declarationSymbolMap.set(declId, {
+              symbol: declarationSymbol,
+              document: currentDoc,
+            });
+            Logger.debug(
+              `[parseFunctionWithDependencies PASS2] ✅ Saved symbol: "${declId}" (name: ${declarationSymbol.name}, file: ${currentDoc.fileName})`
+            );
+          }
         }
       }
 
       // Step 3: Tạo DeclarationNodes dựa trên usage
+      Logger.debug(
+        `[parseFunctionWithDependencies PASS3] Starting with ${declarationUsageMap.size} base declarations`
+      );
+
       let declarationIndex = 0;
-      for (const [baseDeclarationId, usedByFunctions] of declarationUsageMap) {
-        // Tìm declarationSymbol từ visited documents
-        for (const filePath of visitedFiles) {
-          try {
-            const fileUri = vscode.Uri.file(filePath);
-            const fileDoc = await vscode.workspace.openTextDocument(fileUri);
-            const fileSymbols = await this.getDocumentSymbols(fileDoc);
+      declarationUsageMap.forEach((usedByFunctions, baseDeclarationId) => {
+        const declarationInfo = declarationSymbolMap.get(baseDeclarationId);
 
-            const declarationSymbol = fileSymbols.find((s) => {
-              const type = this.getNodeType(s.kind);
-              const id = `${type}_${s.name}`;
-              return id === baseDeclarationId && this.isDeclaration(s);
-            });
-
-            if (declarationSymbol) {
-              usedByFunctions.forEach((functionId) => {
-                const uniqueDeclarationId = `${baseDeclarationId}_usage_${declarationIndex++}`;
-
-                const declarationNode = this.createNodeFromSymbol(
-                  declarationSymbol,
-                  fileDoc
-                );
-
-                declarationNode.id = uniqueDeclarationId;
-                (declarationNode as any).usedBy = [functionId];
-                (declarationNode as any).baseDeclarationId = baseDeclarationId;
-
-                allNodes.set(uniqueDeclarationId, declarationNode);
-
-                allEdges.push({
-                  source: functionId,
-                  target: uniqueDeclarationId,
-                  type: "uses",
-                });
-              });
-
-              break; // Found declaration, no need to search other files
-            }
-          } catch (error) {
-            Logger.error(`Failed to process file: ${filePath}`, error);
-          }
+        if (!declarationInfo) {
+          Logger.warn(
+            `[parseFunctionWithDependencies PASS3] ❌ Symbol not found for "${baseDeclarationId}"`
+          );
+          return;
         }
-      }
+
+        const { symbol: declarationSymbol, document: declDocument } =
+          declarationInfo;
+
+        Logger.debug(
+          `[parseFunctionWithDependencies PASS3] ✅ Processing: ${baseDeclarationId} (used by ${usedByFunctions.size} functions)`
+        );
+
+        usedByFunctions.forEach((functionId) => {
+          const uniqueDeclarationId = `${baseDeclarationId}_usage_${declarationIndex++}`;
+
+          const declarationNode = this.createNodeFromSymbol(
+            declarationSymbol,
+            declDocument
+          );
+
+          declarationNode.id = uniqueDeclarationId;
+          (declarationNode as any).usedBy = [functionId];
+          (declarationNode as any).baseDeclarationId = baseDeclarationId;
+
+          allNodes.set(uniqueDeclarationId, declarationNode);
+
+          allEdges.push({
+            source: functionId,
+            target: uniqueDeclarationId,
+            type: "uses",
+          });
+
+          Logger.debug(
+            `[parseFunctionWithDependencies PASS3] ✅ Created DeclarationNode: ${uniqueDeclarationId} for ${functionId}`
+          );
+        });
+      });
+
+      Logger.debug(
+        `[parseFunctionWithDependencies PASS3] FINAL - Created ${declarationIndex} DeclarationNodes`
+      );
 
       return {
         nodes: Array.from(allNodes.values()),
