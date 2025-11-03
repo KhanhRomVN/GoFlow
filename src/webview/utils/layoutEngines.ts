@@ -16,7 +16,8 @@ const elk = new ELK();
 const FILE_GROUP_PADDING = 80;
 const FILE_GROUP_MARGIN = 200;
 const CODE_NODE_WIDTH = 850;
-const CODE_NODE_HEIGHT = 320;
+const CODE_NODE_MIN_HEIGHT = 206; // ✅ Minimum height cho auto-fit nodes
+const CODE_NODE_DEFAULT_HEIGHT = 320; // ✅ Default height for layout calculations
 const DECLARATION_NODE_WIDTH = 350;
 const DECLARATION_NODE_HEIGHT = 200;
 const MIN_NODE_SPACING = 40;
@@ -193,7 +194,16 @@ function findOptimalPosition(
   let x = preferredX;
   let y = preferredY;
 
-  const maxAttempts = 12; // Increased attempts for better positioning
+  // ✅ THÊM: Validate input trước khi xử lý
+  if (!isFinite(x) || !isFinite(y)) {
+    console.warn(
+      `[findOptimalPosition] Invalid input position: x=${x}, y=${y} - using fallback`
+    );
+    x = 100;
+    y = 100;
+  }
+
+  const maxAttempts = 12;
   let attempts = 0;
 
   while (
@@ -208,21 +218,20 @@ function findOptimalPosition(
       existingDeclarations
     )
   ) {
-    // Try different positions in a spiral pattern
     const spiralStep = Math.floor(attempts / 4) + 1;
     const spiralDirection = attempts % 4;
 
     switch (spiralDirection) {
-      case 0: // Right
+      case 0:
         x = preferredX + spiralStep * (width + MIN_NODE_SPACING);
         break;
-      case 1: // Down
+      case 1:
         y = preferredY + spiralStep * (height + MIN_NODE_SPACING);
         break;
-      case 2: // Left
+      case 2:
         x = preferredX - spiralStep * (width + MIN_NODE_SPACING);
         break;
-      case 3: // Up
+      case 3:
         y = preferredY - spiralStep * (height + MIN_NODE_SPACING);
         break;
     }
@@ -230,9 +239,7 @@ function findOptimalPosition(
     attempts++;
   }
 
-  // If still occupied after attempts, try a completely different approach
   if (attempts >= maxAttempts) {
-    // Find the rightmost function node and place declaration to its right
     let maxX = -Infinity;
     let baseY = preferredY;
 
@@ -246,11 +253,20 @@ function findOptimalPosition(
     });
 
     if (maxX > -Infinity) {
-      return { x: maxX + MIN_NODE_SPACING, y: baseY };
+      x = maxX + MIN_NODE_SPACING;
+      y = baseY;
+    } else {
+      x = preferredX + 500;
+      y = preferredY + 100;
     }
+  }
 
-    // Ultimate fallback
-    return { x: preferredX + 500, y: preferredY + 100 };
+  // ✅ THÊM: Validate output trước khi return
+  if (!isFinite(x) || !isFinite(y) || x < 0 || y < 0) {
+    console.warn(
+      `[findOptimalPosition] Invalid output position: x=${x}, y=${y} - using safe fallback`
+    );
+    return { x: 100, y: 100 };
   }
 
   return { x, y };
@@ -271,7 +287,8 @@ function placeDeclarationNodesNearCallers(
   // Mark all function node positions as occupied
   functionNodes.forEach((node) => {
     const nodeWidth = (node.style?.width as number) || CODE_NODE_WIDTH;
-    const nodeHeight = (node.style?.height as number) || CODE_NODE_HEIGHT;
+    const nodeHeight =
+      (node.style?.height as number) || CODE_NODE_DEFAULT_HEIGHT;
     occupiedPositions.set(node.id, {
       x: node.position.x,
       y: node.position.y,
@@ -308,7 +325,7 @@ function placeDeclarationNodesNearCallers(
     const callerY = callerNode.position.y;
     const callerWidth = (callerNode.style?.width as number) || CODE_NODE_WIDTH;
     const callerHeight =
-      (callerNode.style?.height as number) || CODE_NODE_HEIGHT;
+      (callerNode.style?.height as number) || CODE_NODE_DEFAULT_HEIGHT;
 
     // Calculate initial declaration area (right side of caller)
     const baseX = callerX + callerWidth + MIN_NODE_SPACING;
@@ -328,7 +345,15 @@ function placeDeclarationNodesNearCallers(
       let preferredY =
         baseY + row * (DECLARATION_NODE_HEIGHT + MIN_NODE_SPACING);
 
-      // Adjust position to avoid overlaps with other nodes
+      // ✅ THÊM: Validate preferred position
+      if (!isFinite(preferredX) || !isFinite(preferredY)) {
+        console.warn(
+          `[placeDeclarationNodesNearCallers] Invalid preferred position for ${declNode.id}: x=${preferredX}, y=${preferredY}`
+        );
+        preferredX = 100;
+        preferredY = 100;
+      }
+
       const adjustedPosition = findOptimalPosition(
         preferredX,
         preferredY,
@@ -339,23 +364,30 @@ function placeDeclarationNodesNearCallers(
         positionedDeclarations
       );
 
+      // ✅ THÊM: Validate adjusted position trước khi tạo node
+      const safePosition = {
+        x: Math.max(0, isFinite(adjustedPosition.x) ? adjustedPosition.x : 100),
+        y: Math.max(0, isFinite(adjustedPosition.y) ? adjustedPosition.y : 100),
+      };
+
       const positionedNode = {
         ...declNode,
-        position: adjustedPosition,
+        position: safePosition, // ✅ Sử dụng safe position
         zIndex: 5,
         style: {
           ...declNode.style,
           width: DECLARATION_NODE_WIDTH,
           height: DECLARATION_NODE_HEIGHT,
         },
+        width: DECLARATION_NODE_WIDTH,
+        height: DECLARATION_NODE_HEIGHT,
       };
 
       positionedDeclarations.push(positionedNode);
 
-      // Mark this position as occupied
       occupiedPositions.set(declNode.id, {
-        x: adjustedPosition.x,
-        y: adjustedPosition.y,
+        x: safePosition.x, // ✅ Sử dụng safe position
+        y: safePosition.y,
         width: DECLARATION_NODE_WIDTH,
         height: DECLARATION_NODE_HEIGHT,
       });
@@ -375,18 +407,27 @@ function placeDeclarationNodesNearCallers(
       const column = index % 3;
       const row = Math.floor(index / 3);
 
+      // ✅ THÊM: Validate fallback position
+      const x =
+        fallbackX + column * (DECLARATION_NODE_WIDTH + MIN_NODE_SPACING);
+      const y = fallbackY + row * (DECLARATION_NODE_HEIGHT + MIN_NODE_SPACING);
+
+      const safePosition = {
+        x: isFinite(x) && x >= 0 ? x : 100,
+        y: isFinite(y) && y >= 0 ? y : 100,
+      };
+
       const positionedNode = {
         ...declNode,
-        position: {
-          x: fallbackX + column * (DECLARATION_NODE_WIDTH + MIN_NODE_SPACING),
-          y: fallbackY + row * (DECLARATION_NODE_HEIGHT + MIN_NODE_SPACING),
-        },
+        position: safePosition, // ✅ Sử dụng safe position
         zIndex: 5,
         style: {
           ...declNode.style,
           width: DECLARATION_NODE_WIDTH,
           height: DECLARATION_NODE_HEIGHT,
         },
+        width: DECLARATION_NODE_WIDTH,
+        height: DECLARATION_NODE_HEIGHT,
       };
 
       positionedDeclarations.push(positionedNode);
@@ -463,9 +504,13 @@ function layoutGroupWithDagre(
   });
 
   nodes.forEach((node) => {
+    // ✅ Use actual node height if available, fallback to default
+    const nodeHeight =
+      (node.style?.height as number) || CODE_NODE_DEFAULT_HEIGHT;
+
     dagreGraph.setNode(node.id, {
       width: CODE_NODE_WIDTH,
-      height: CODE_NODE_HEIGHT,
+      height: nodeHeight,
     });
   });
 
@@ -477,11 +522,34 @@ function layoutGroupWithDagre(
 
   const layoutedNodes = nodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
+
+    // ✅ THÊM: Validate và đảm bảo node dimensions hợp lệ
+    const nodeHeight = Math.max(
+      CODE_NODE_MIN_HEIGHT,
+      (node.style?.height as number) || CODE_NODE_DEFAULT_HEIGHT
+    );
+
+    // ✅ THÊM: Validate position values
+    let posX = nodeWithPosition.x - CODE_NODE_WIDTH / 2;
+    let posY = nodeWithPosition.y - nodeHeight / 2;
+
+    // Đảm bảo positions là số hợp lệ và không âm
+    if (!isFinite(posX) || posX < 0) posX = 0;
+    if (!isFinite(posY) || posY < 0) posY = 0;
+
     return {
       ...node,
       position: {
-        x: nodeWithPosition.x - CODE_NODE_WIDTH / 2,
-        y: nodeWithPosition.y - CODE_NODE_HEIGHT / 2,
+        x: posX,
+        y: posY,
+      },
+      // ✅ THÊM: Đảm bảo node có dimensions hợp lệ
+      width: CODE_NODE_WIDTH,
+      height: nodeHeight,
+      style: {
+        ...node.style,
+        width: CODE_NODE_WIDTH,
+        height: nodeHeight,
       },
     };
   });
@@ -524,10 +592,13 @@ export function layoutWithDagre(
     group.nodes.forEach((node) => {
       const x = node.position.x;
       const y = node.position.y;
+      const nodeHeight =
+        (node.style?.height as number) || CODE_NODE_DEFAULT_HEIGHT;
+
       minX = Math.min(minX, x);
       minY = Math.min(minY, y);
       maxX = Math.max(maxX, x + CODE_NODE_WIDTH);
-      maxY = Math.max(maxY, y + CODE_NODE_HEIGHT);
+      maxY = Math.max(maxY, y + nodeHeight);
     });
 
     return {
@@ -638,7 +709,7 @@ async function layoutGroupWithELK(
     children: nodes.map((node) => ({
       id: node.id,
       width: CODE_NODE_WIDTH,
-      height: CODE_NODE_HEIGHT,
+      height: (node.style?.height as number) || CODE_NODE_DEFAULT_HEIGHT,
     })),
     edges: edges.map((edge) => ({
       id: edge.id,
@@ -700,10 +771,13 @@ export async function layoutWithELK(
     group.nodes.forEach((node) => {
       const x = node.position.x;
       const y = node.position.y;
+      const nodeHeight =
+        (node.style?.height as number) || CODE_NODE_DEFAULT_HEIGHT;
+
       minX = Math.min(minX, x);
       minY = Math.min(minY, y);
       maxX = Math.max(maxX, x + CODE_NODE_WIDTH);
-      maxY = Math.max(maxY, y + CODE_NODE_HEIGHT);
+      maxY = Math.max(maxY, y + nodeHeight);
     });
 
     return {
@@ -852,10 +926,13 @@ export function layoutWithD3Force(
     group.nodes.forEach((node) => {
       const x = node.position.x;
       const y = node.position.y;
+      const nodeHeight =
+        (node.style?.height as number) || CODE_NODE_DEFAULT_HEIGHT;
+
       minX = Math.min(minX, x);
       minY = Math.min(minY, y);
       maxX = Math.max(maxX, x + CODE_NODE_WIDTH);
-      maxY = Math.max(maxY, y + CODE_NODE_HEIGHT);
+      maxY = Math.max(maxY, y + nodeHeight);
     });
 
     return {

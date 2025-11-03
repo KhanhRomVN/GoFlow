@@ -20,6 +20,7 @@ interface MonacoCodeEditorProps {
   readOnly?: boolean;
   lineNumber?: number;
   onLineClick?: (lineNumber: number, lineContent: string) => void;
+  onEditorHeightChange?: (height: number) => void; // THÊM prop mới
 }
 
 // Biến toàn cục để theo dõi trạng thái khởi tạo
@@ -33,6 +34,7 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   readOnly = false,
   lineNumber = 1,
   onLineClick,
+  onEditorHeightChange, // THÊM prop mới
 }) => {
   const [isEditorReady, setIsEditorReady] = useState(false);
 
@@ -108,6 +110,45 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
     }
 
     monaco.editor.setTheme(themeName);
+
+    // ✅ THAY ĐỔI: Tính toán chiều cao dựa trên số dòng thực tế
+    const lineHeight = 19; // Monaco default line height
+    const maxLines = 25; // Giới hạn tối đa 25 dòng
+    const maxHeight = lineHeight * maxLines;
+    const minHeight = lineHeight * 3; // Tối thiểu 3 dòng
+
+    // Update editor height based on actual line count
+    const updateEditorHeight = () => {
+      const model = editor.getModel();
+      if (!model) return;
+
+      // Lấy số dòng thực tế trong code
+      const actualLineCount = model.getLineCount();
+
+      // Tính chiều cao dựa trên số dòng thực tế, nhưng cap ở maxLines
+      const targetLineCount = Math.min(actualLineCount, maxLines);
+      const targetHeight = Math.max(
+        minHeight,
+        targetLineCount * lineHeight + 16
+      ); // +16 cho padding top/bottom (8px each) từ Monaco options
+
+      // Layout editor với chiều cao mới
+      editor.layout({
+        width: editor.getLayoutInfo().width,
+        height: targetHeight,
+      });
+
+      // Thông báo về parent node để update node height
+      if (onEditorHeightChange) {
+        onEditorHeightChange(targetHeight);
+      }
+    };
+
+    // Initial height update
+    updateEditorHeight();
+
+    // Update height when content changes
+    editor.onDidContentSizeChange(updateEditorHeight);
 
     // Set line number offset if needed
     if (lineNumber > 1) {

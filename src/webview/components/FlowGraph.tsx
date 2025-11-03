@@ -686,8 +686,11 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             } as FunctionNodeData,
             style: {
               width: 650,
-              height: 320,
+              height: "auto",
+              minHeight: 206,
             },
+            width: 650, // ✅ CRITICAL: React Flow dimension requirement
+            height: 320, // ✅ CRITICAL: Đặt height mặc định thay vì "auto" cho layout engine
             zIndex: 10,
           } as FlowNode);
         } else if (
@@ -697,11 +700,19 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           node.type === "enum" ||
           node.type === "type"
         ) {
-          // DeclarationNode
+          const validWidth = 350;
+          const validHeight = 200;
+
+          // ✅ THÊM: Validate initial position
+          const safePosition = {
+            x: 0, // Safe default
+            y: 0, // Safe default
+          };
+
           flowNodes.push({
             id: node.id,
             type: "declarationNode" as const,
-            position: { x: 0, y: 0 },
+            position: safePosition, // ✅ Sử dụng safe position
             data: {
               id: node.id,
               label: node.label,
@@ -713,9 +724,11 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               usedBy: (node as any).usedBy || [],
             },
             style: {
-              width: 350,
-              height: 200,
+              width: validWidth,
+              height: validHeight,
             },
+            width: validWidth,
+            height: validHeight,
             zIndex: 5,
           } as FlowNode);
         }

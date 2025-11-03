@@ -120,16 +120,52 @@ interface FunctionNodeData extends Record<string, unknown> {
   onClearNodeHighlight?: () => void;
   allNodes?: any[];
   lineHighlightedEdges?: Set<string>;
+  onEditorHeightChange?: (height: number) => void;
 }
 
-const FunctionNode: React.FC<NodeProps> = ({ data, selected }) => {
+const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [isNodeHighlighted, setIsNodeHighlighted] = useState(false);
+  const [editorHeight, setEditorHeight] = useState(150);
+  const [totalNodeHeight, setTotalNodeHeight] = useState(206); // Initial: 56 (header) + 150 (editor) + 8 (padding)
   const nodeData = data as FunctionNodeData;
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const nodeRef = useRef<HTMLDivElement>(null);
 
   const lineHighlightedEdges = nodeData.lineHighlightedEdges || new Set();
+
+  // Handle editor height changes
+  const handleEditorHeightChange = useCallback(
+    (height: number) => {
+      setEditorHeight(height);
+
+      // Calculate new total node height
+      const newTotalHeight = 56 + height + 8; // header (56) + editor + padding (8)
+      setTotalNodeHeight(newTotalHeight);
+
+      // ✅ CRITICAL: Force update React Flow node dimensions
+      if (nodeRef.current) {
+        nodeRef.current.style.height = `${newTotalHeight}px`;
+
+        // Trigger React Flow to recalculate node dimensions
+        const resizeEvent = new Event("resize");
+        window.dispatchEvent(resizeEvent);
+      }
+
+      // Update node data if callback exists
+      if (nodeData.onEditorHeightChange) {
+        nodeData.onEditorHeightChange(newTotalHeight);
+      }
+
+      // ✅ CRITICAL: Update React Flow node height
+      // This triggers React Flow to recalculate node dimensions
+      if (nodeRef.current) {
+        nodeRef.current.style.height = `${newTotalHeight}px`;
+      }
+    },
+    [nodeData]
+  );
 
   const getRelativePath = (fullPath: string): string => {
     const parts = fullPath.split(/[/\\]/);
@@ -247,9 +283,9 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected }) => {
         color={nodeData.type === "function" ? "#10b981" : "#6366f1"}
         isVisible={selected}
         minWidth={650}
-        minHeight={300}
+        minHeight={totalNodeHeight}
         maxWidth={1400}
-        maxHeight={1200}
+        maxHeight={800}
         handleStyle={{
           width: 10,
           height: 10,
@@ -390,8 +426,9 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected }) => {
         <div
           className="code-entity-node-body"
           style={{
-            flex: 1,
-            minHeight: 200,
+            minHeight: `${editorHeight}px`,
+            height: `${editorHeight}px`,
+            maxHeight: "500px",
             overflow: "hidden",
           }}
         >
@@ -407,15 +444,9 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected }) => {
               readOnly={false}
               lineNumber={nodeData.line}
               onLineClick={handleLineClick}
+              onEditorHeightChange={handleEditorHeightChange}
             />
           </div>
-        </div>
-
-        <div className="code-entity-node-footer">
-          <span className="code-entity-node-file-path" title={nodeData.file}>
-            📄 {getRelativePath(nodeData.file)}
-          </span>
-          <span className="code-entity-node-line-badge">{getLineRange()}</span>
         </div>
       </div>
     </>
