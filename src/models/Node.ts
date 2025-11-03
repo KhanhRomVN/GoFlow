@@ -28,7 +28,10 @@ export interface Edge {
   source: string;
   target: string;
   type: "calls" | "uses" | "implements";
-  hasReturnValue?: boolean; // true = solid line, false = dashed line
+  hasReturnValue?: boolean;
+  data?: {
+    callOrder?: number;
+  };
 }
 
 export interface GraphData {

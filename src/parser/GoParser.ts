@@ -46,22 +46,61 @@ export class GoParser {
         }
       }
 
-      // Tạo node map để lookup nhanh
+      // Tạo node map để lookup nhanh - CRITICAL: populate TRƯỚC KHI find edges
       const nodeMap = new Map<string, Node>();
-      nodes.forEach((node) => nodeMap.set(node.id, node));
+      functionNodes.forEach((node) => nodeMap.set(node.id, node));
+
+      // DEBUG LOG
+      Logger.debug(
+        `[parseFile PASS2] Created nodeMap with ${nodeMap.size} function nodes`,
+        {
+          nodeIds: Array.from(nodeMap.keys()),
+        }
+      );
 
       // === PASS 2: Tạo edges + track declaration usage ===
       const declarationUsageMap = new Map<string, Set<string>>(); // declarationId -> Set<functionId>
 
       for (const functionNode of functionNodes) {
+        Logger.debug(
+          `[parseFile] Looking for symbol for node: ${functionNode.id}`,
+          {
+            availableSymbols: symbols
+              .filter((s) => this.isFunctionOrMethod(s))
+              .map((s) => {
+                const nodeType = this.getNodeType(s.kind);
+                const cleanName = this.extractCleanFunctionName(s.name);
+                const symbolId = `${nodeType}_${cleanName}`;
+                return {
+                  originalName: s.name,
+                  cleanName,
+                  nodeType,
+                  symbolId,
+                };
+              }),
+          }
+        );
+
         const symbol = symbols.find((s) => {
+          if (!this.isFunctionOrMethod(s)) return false;
+
           const nodeType = this.getNodeType(s.kind);
           const cleanName = this.extractCleanFunctionName(s.name);
           const id = `${nodeType}_${cleanName}`;
-          return id === functionNode.id && this.isFunctionOrMethod(s);
+
+          return id === functionNode.id;
         });
 
-        if (!symbol) continue;
+        if (!symbol) {
+          Logger.warn(
+            `[parseFile] ❌ Could not find symbol for function node: ${functionNode.id}`
+          );
+          continue;
+        }
+
+        Logger.debug(
+          `[parseFile] ✅ Found matching symbol for ${functionNode.id}: ${symbol.name}`
+        );
 
         // Tìm function calls using EdgeDetector
         const edgeContext: EdgeDetectionContext = {
@@ -70,8 +109,26 @@ export class GoParser {
           nodeMap,
         };
 
-        const callees =
-          await this.edgeDetector.findFunctionCallsWithReturnUsage(edgeContext);
+        let callees: any[] = [];
+        try {
+          Logger.debug(
+            `[parseFile] Calling findFunctionCallsWithReturnUsage for: ${functionNode.id}`
+          );
+
+          callees = await this.edgeDetector.findFunctionCallsWithReturnUsage(
+            edgeContext
+          );
+
+          Logger.debug(
+            `[parseFile] findFunctionCallsWithReturnUsage returned ${callees.length} callees for: ${functionNode.id}`
+          );
+        } catch (error) {
+          Logger.error(
+            `[parseFile] ❌ CRITICAL: findFunctionCallsWithReturnUsage failed for ${functionNode.id}`,
+            error
+          );
+          continue; // Skip this function node
+        }
 
         for (const callee of callees) {
           const edgeKey = `${functionNode.id}->${callee.target}`;
@@ -85,6 +142,9 @@ export class GoParser {
               target: callee.target,
               type: "calls",
               hasReturnValue: callee.usesReturnValue,
+              data: {
+                callOrder: callee.callOrder,
+              },
             });
             edgeMap.get(functionNode.id)!.add(callee.target);
           }
@@ -245,6 +305,9 @@ export class GoParser {
               target: callee.targetId,
               type: "calls",
               hasReturnValue: callee.usesReturnValue,
+              data: {
+                callOrder: callee.callOrder, // ✅ Thêm callOrder
+              },
             });
             edgeMap.get(currentNode.id)!.add(callee.targetId);
           }
@@ -353,6 +416,7 @@ export class GoParser {
       targetDocument: vscode.TextDocument;
       crossFile: boolean;
       usesReturnValue: boolean;
+      callOrder: number; // ✅ Thêm field
     }>
   > {
     const callees: Array<{
@@ -361,11 +425,14 @@ export class GoParser {
       targetDocument: vscode.TextDocument;
       crossFile: boolean;
       usesReturnValue: boolean;
+      callOrder: number;
     }> = [];
 
     const text = document.getText(symbol.range);
     const lines = text.split("\n");
     const functionCallRegex = /\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
+
+    let callOrder = 0;
 
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
       const line = lines[lineIndex];
@@ -428,12 +495,15 @@ export class GoParser {
                         functionName
                       );
 
+                    callOrder++;
+
                     callees.push({
                       targetId,
                       targetSymbol,
                       targetDocument: defDocument,
                       crossFile: isCrossFile,
                       usesReturnValue,
+                      callOrder,
                     });
                   }
                 }
@@ -547,7 +617,7 @@ export class GoParser {
   }
 
   private extractCleanFunctionName(fullName: string): string {
-    const methodPattern = /\(.*?\)\s+(\w+)/;
+    const methodPattern = /\(.*?\)\.(\w+)/;
     const match = fullName.match(methodPattern);
     if (match) {
       return match[1];

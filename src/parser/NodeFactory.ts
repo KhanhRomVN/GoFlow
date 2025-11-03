@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { Node } from "../models/Node";
+import { Logger } from "../utils/logger";
 
 export class NodeFactory {
   createNodeFromSymbol(
@@ -10,6 +11,13 @@ export class NodeFactory {
     const nodeType = this.getNodeType(symbol.kind);
     const cleanName = this.extractCleanFunctionName(symbol.name);
     const id = `${nodeType}_${cleanName}`;
+
+    Logger.debug(`[NodeFactory] Creating node:`, {
+      originalName: symbol.name,
+      cleanName: cleanName,
+      nodeType: nodeType,
+      id: id,
+    });
     const code = document.getText(symbol.range);
     const language = this.detectLanguage(document.fileName);
     const { returnType, hasReturnValue } = this.analyzeReturnType(
@@ -64,9 +72,15 @@ export class NodeFactory {
   }
 
   private extractCleanFunctionName(fullName: string): string {
-    const methodPattern = /\(.*?\)\s+(\w+)/;
+    // For Go methods: (*ReceiverType).MethodName → MethodName
+    const methodPattern = /\(.*?\)\.(\w+)/;
     const match = fullName.match(methodPattern);
-    return match ? match[1] : fullName;
+    if (match) {
+      return match[1]; // Return only the method name
+    }
+
+    // For regular functions: just return the name
+    return fullName;
   }
 
   private detectLanguage(fileName: string): string {
