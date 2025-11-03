@@ -550,64 +550,48 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
       const containerNodes: FlowNode[] = [];
       const nodesByFile = new Map<string, FlowNode[]>();
 
-      // STEP 1: Group FunctionNodes by file
+      // Group all nodes by file
       nodes.forEach((node) => {
-        if (node.type === "functionNode") {
-          const file = (node.data as FunctionNodeData).file;
-          if (!nodesByFile.has(file)) {
-            nodesByFile.set(file, []);
-          }
-          nodesByFile.get(file)!.push(node);
-        }
-      });
+        let file: string;
 
-      // STEP 2: Group DeclarationNodes by CALLER's file
-      nodes.forEach((node) => {
-        if (node.type === "declarationNode") {
+        if (node.type === "functionNode") {
+          file = (node.data as FunctionNodeData).file;
+        } else if (node.type === "declarationNode") {
           const declData = node.data as DeclarationNodeData;
           const usedBy = declData.usedBy || [];
 
-          // CRITICAL: Tìm caller FunctionNode đầu tiên
+          // Find the primary caller for this declaration
           const callerNode = nodes.find(
             (n) => n.type === "functionNode" && usedBy.includes(n.id)
           );
 
           if (callerNode) {
-            const callerFile = (callerNode.data as FunctionNodeData).file;
-
-            if (!nodesByFile.has(callerFile)) {
-              nodesByFile.set(callerFile, []);
-            }
-            nodesByFile.get(callerFile)!.push(node);
+            file = (callerNode.data as FunctionNodeData).file;
           } else {
-            // THÊM LOG DEBUG - DeclarationNode không có caller
-            console.warn(
-              `  ⚠️ No caller found for DeclarationNode: ${node.id}`
-            );
-            console.warn(`     Expected usedBy:`, usedBy);
-
-            // Fallback: đặt vào file của chính declaration node
-            const declFile = (node.data as DeclarationNodeData).file;
-            if (!nodesByFile.has(declFile)) {
-              nodesByFile.set(declFile, []);
-            }
-            nodesByFile.get(declFile)!.push(node);
+            // Fallback to declaration's own file
+            file = (node.data as DeclarationNodeData).file;
           }
+        } else {
+          return; // Skip other node types
         }
+
+        if (!nodesByFile.has(file)) {
+          nodesByFile.set(file, []);
+        }
+        nodesByFile.get(file)!.push(node);
       });
 
-      // STEP 3: Calculate bounding box for each file group (including DeclarationNodes)
+      // Calculate bounding boxes with proper padding
       nodesByFile.forEach((fileNodes, file) => {
         if (fileNodes.length === 0) return;
 
-        const padding = 40;
+        const padding = 60; // Increased padding for better spacing
         let minX = Infinity;
         let minY = Infinity;
         let maxX = -Infinity;
         let maxY = -Infinity;
 
         fileNodes.forEach((node) => {
-          // Use appropriate dimensions for different node types
           let nodeWidth, nodeHeight;
 
           if (node.type === "functionNode") {
@@ -630,12 +614,13 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           maxY = Math.max(maxY, y + nodeHeight);
         });
 
+        // Add extra space for declaration nodes that might be placed outside
         const containerWidth = maxX - minX + padding * 2;
         const containerHeight = maxY - minY + padding * 2;
 
         const containerId = `container-${file}`;
 
-        // Count nodes by type for the container
+        // Count nodes by type
         const functionNodeCount = fileNodes.filter(
           (n) => n.type === "functionNode"
         ).length;
@@ -1123,7 +1108,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
                 return false;
               }
 
-              // CRITICAL FIX: Check if ANY caller is visible (not just first)
+              // Only show declaration if at least one caller is visible
               const hasVisibleCaller = declData.usedBy.some((callerId) => {
                 return !hiddenNodeIds.has(callerId);
               });
@@ -1131,11 +1116,10 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               return hasVisibleCaller;
             }
 
-            // In the main ReactFlow component's nodes filter
             if (n.type === "fileGroupContainer") {
               const containerFile = (n.data as any).fileName;
 
-              // Count visible nodes (both FunctionNodes AND DeclarationNodes)
+              // Count visible nodes in this container
               const visibleNodesInContainer = nodes.filter((node) => {
                 if (node.type === "functionNode") {
                   return (
@@ -1148,20 +1132,12 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
                   const declData = node.data as DeclarationNodeData;
                   const usedBy = declData.usedBy || [];
 
-                  // Check if declaration belongs to this container by finding its caller
-                  const callerNode = nodes.find(
-                    (caller) =>
-                      caller.type === "functionNode" &&
-                      usedBy.includes(caller.id)
-                  );
+                  const hasVisibleCaller = usedBy.some((callerId) => {
+                    const callerNode = nodes.find((n) => n.id === callerId);
+                    return callerNode && !hiddenNodeIds.has(callerId);
+                  });
 
-                  if (
-                    callerNode &&
-                    (callerNode.data as FunctionNodeData).file === containerFile
-                  ) {
-                    // Check if the caller is visible
-                    return !hiddenNodeIds.has(callerNode.id);
-                  }
+                  return hasVisibleCaller;
                 }
 
                 return false;

@@ -13,13 +13,16 @@ import { LayoutStrategy } from "../configs/layoutStrategies";
 const elk = new ELK();
 
 // ==================== CONSTANTS ====================
-const FILE_GROUP_PADDING = 70;
-const FILE_GROUP_MARGIN = 150;
+const FILE_GROUP_PADDING = 80;
+const FILE_GROUP_MARGIN = 200;
 const CODE_NODE_WIDTH = 850;
 const CODE_NODE_HEIGHT = 320;
-const DECLARATION_OFFSET_X = 150;
-const DECLARATION_BASE_OFFSET_Y = -60;
-const DECLARATION_STACK_SPACING = 230;
+const DECLARATION_NODE_WIDTH = 350;
+const DECLARATION_NODE_HEIGHT = 200;
+const MIN_NODE_SPACING = 40;
+const DECLARATION_GRID_COLUMNS = 2;
+const DECLARATION_GRID_SPACING = 60;
+const MIN_CONTAINER_SPACING = 100;
 
 // ==================== HELPER: GROUP NODES BY FILE ====================
 interface FileGroup {
@@ -137,118 +140,337 @@ function getCrossFileEdges(groups: FileGroup[], allEdges: Edge[]): Edge[] {
   return crossFileEdges;
 }
 
-// ==================== HELPER: PLACE DECLARATION NODES NEAR CALLERS ====================
-// ==================== HELPER: PLACE DECLARATION NODES NEAR CALLERS ====================
-// ==================== HELPER: PLACE DECLARATION NODES NEAR CALLERS ====================
+// ==================== HELPER: CHECK RECTANGLE OVERLAP ====================
+function rectanglesOverlap(
+  rect1: { x: number; y: number; width: number; height: number },
+  rect2: { x: number; y: number; width: number; height: number }
+): boolean {
+  return (
+    rect1.x < rect2.x + rect2.width + MIN_NODE_SPACING &&
+    rect1.x + rect1.width + MIN_NODE_SPACING > rect2.x &&
+    rect1.y < rect2.y + rect2.height + MIN_NODE_SPACING &&
+    rect1.y + rect1.height + MIN_NODE_SPACING > rect2.y
+  );
+}
+
+// ==================== HELPER: CHECK POSITION OCCUPIED ====================
+function isPositionOccupied(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  occupiedPositions: Map<
+    string,
+    { x: number; y: number; width: number; height: number }
+  >,
+  functionNodes: Node[],
+  existingDeclarations: Node[]
+): boolean {
+  const newRect = { x, y, width, height };
+
+  // Check against occupied positions
+  for (const [_, occupied] of occupiedPositions) {
+    if (rectanglesOverlap(newRect, occupied)) {
+      return true;
+    }
+  }
+
+  // Check against existing declaration nodes
+  for (const declNode of existingDeclarations) {
+    const declRect = {
+      x: declNode.position.x,
+      y: declNode.position.y,
+      width: DECLARATION_NODE_WIDTH,
+      height: DECLARATION_NODE_HEIGHT,
+    };
+
+    if (rectanglesOverlap(newRect, declRect)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// ==================== HELPER: FIND OPTIMAL POSITION ====================
+function findOptimalPosition(
+  preferredX: number,
+  preferredY: number,
+  width: number,
+  height: number,
+  occupiedPositions: Map<
+    string,
+    { x: number; y: number; width: number; height: number }
+  >,
+  functionNodes: Node[],
+  existingDeclarations: Node[]
+): { x: number; y: number } {
+  let x = preferredX;
+  let y = preferredY;
+
+  const maxAttempts = 12; // Increased attempts for better positioning
+  let attempts = 0;
+
+  while (
+    attempts < maxAttempts &&
+    isPositionOccupied(
+      x,
+      y,
+      width,
+      height,
+      occupiedPositions,
+      functionNodes,
+      existingDeclarations
+    )
+  ) {
+    // Try different positions in a spiral pattern
+    const spiralStep = Math.floor(attempts / 4) + 1;
+    const spiralDirection = attempts % 4;
+
+    switch (spiralDirection) {
+      case 0: // Right
+        x = preferredX + spiralStep * (width + MIN_NODE_SPACING);
+        break;
+      case 1: // Down
+        y = preferredY + spiralStep * (height + MIN_NODE_SPACING);
+        break;
+      case 2: // Left
+        x = preferredX - spiralStep * (width + MIN_NODE_SPACING);
+        break;
+      case 3: // Up
+        y = preferredY - spiralStep * (height + MIN_NODE_SPACING);
+        break;
+    }
+
+    attempts++;
+  }
+
+  // If still occupied after attempts, try a completely different approach
+  if (attempts >= maxAttempts) {
+    console.warn(
+      `Could not find optimal position for declaration node, using fallback position`
+    );
+
+    // Find the rightmost function node and place declaration to its right
+    let maxX = -Infinity;
+    let baseY = preferredY;
+
+    functionNodes.forEach((node) => {
+      const nodeX =
+        node.position.x + ((node.style?.width as number) || CODE_NODE_WIDTH);
+      if (nodeX > maxX) {
+        maxX = nodeX;
+        baseY = node.position.y;
+      }
+    });
+
+    if (maxX > -Infinity) {
+      return { x: maxX + MIN_NODE_SPACING, y: baseY };
+    }
+
+    // Ultimate fallback
+    return { x: preferredX + 500, y: preferredY + 100 };
+  }
+
+  return { x, y };
+}
+
+// ==================== ENHANCED: PLACE DECLARATION NODES NEAR CALLERS ====================
 function placeDeclarationNodesNearCallers(
   functionNodes: Node[],
   declarationNodes: Node[],
   edges: Edge[]
 ): Node[] {
   const positionedDeclarations: Node[] = [];
+  const occupiedPositions = new Map<
+    string,
+    { x: number; y: number; width: number; height: number }
+  >();
 
-  // Group declarations by caller to stack them vertically if multiple declarations per function
+  // Mark all function node positions as occupied
+  functionNodes.forEach((node) => {
+    const nodeWidth = (node.style?.width as number) || CODE_NODE_WIDTH;
+    const nodeHeight = (node.style?.height as number) || CODE_NODE_HEIGHT;
+    occupiedPositions.set(node.id, {
+      x: node.position.x,
+      y: node.position.y,
+      width: nodeWidth,
+      height: nodeHeight,
+    });
+  });
+
   const declarationsByFunction = new Map<string, Node[]>();
 
-  declarationNodes.forEach((declNode, declIndex) => {
-    // CRITICAL DEBUG: Check if this declaration has ANY incoming edges
-    const allIncomingEdges = edges.filter(
-      (edge) => edge.target === declNode.id
-    );
-
-    // Tìm FunctionNode sử dụng DeclarationNode này (edge type = "uses")
+  // Group declarations by caller function
+  declarationNodes.forEach((declNode) => {
     const callerEdge = edges.find(
       (edge) => edge.target === declNode.id && edge.type === "uses"
     );
 
     if (callerEdge) {
       const callerNode = functionNodes.find((n) => n.id === callerEdge.source);
-
       if (callerNode) {
         if (!declarationsByFunction.has(callerNode.id)) {
           declarationsByFunction.set(callerNode.id, []);
         }
         declarationsByFunction.get(callerNode.id)!.push(declNode);
-      } else {
-        console.warn(`   ⚠️ Caller node not found: ${callerEdge.source}`);
       }
     } else {
-      // Fallback: nếu không tìm thấy caller, đặt ở vị trí mặc định (góc trên trái)
+      // Fallback: place at default position
       console.warn(
-        `   ⚠️ No caller edge found - placing at default position (0, 0)`
+        `   ⚠️ No caller edge found for DeclarationNode: ${declNode.id}`
       );
-      console.warn(
-        `   🔍 Expected edge pattern: <any_function_id> -> ${declNode.id} with type="uses"`
-      );
-      positionedDeclarations.push({
-        ...declNode,
-        position: { x: 0, y: 0 },
-        zIndex: 5,
-      });
     }
   });
 
-  // Đặt declarations theo từng function caller
-  let globalDeclarationIndex = 0;
-
+  // Place declarations for each function
   declarationsByFunction.forEach((declarations, functionId) => {
     const callerNode = functionNodes.find((n) => n.id === functionId);
-    if (!callerNode) {
-      console.error(`   ❌ Caller node not found for ${functionId}`);
-      return;
-    }
+    if (!callerNode) return;
 
-    const offsetX = 120; // Khoảng cách ngang từ FunctionNode
-    const baseOffsetY = -50; // Offset ban đầu theo chiều dọc
-    const stackSpacing = 220; // Khoảng cách giữa các declarations (DeclarationNode height ~200px)
+    const callerX = callerNode.position.x;
+    const callerY = callerNode.position.y;
+    const callerWidth = (callerNode.style?.width as number) || CODE_NODE_WIDTH;
+    const callerHeight =
+      (callerNode.style?.height as number) || CODE_NODE_HEIGHT;
+
+    // Calculate initial declaration area (right side of caller)
+    const baseX = callerX + callerWidth + MIN_NODE_SPACING;
+    const baseY = callerY;
+
+    // Group declarations into columns for better layout
+    const declarationsPerColumn = Math.ceil(
+      declarations.length / DECLARATION_GRID_COLUMNS
+    );
 
     declarations.forEach((declNode, index) => {
-      const yPosition =
-        callerNode.position.y + baseOffsetY + index * stackSpacing;
-      const xPosition = callerNode.position.x + CODE_NODE_WIDTH + offsetX;
+      const column = index % DECLARATION_GRID_COLUMNS;
+      const row = Math.floor(index / DECLARATION_GRID_COLUMNS);
+
+      let preferredX =
+        baseX + column * (DECLARATION_NODE_WIDTH + DECLARATION_GRID_SPACING);
+      let preferredY =
+        baseY + row * (DECLARATION_NODE_HEIGHT + MIN_NODE_SPACING);
+
+      // Adjust position to avoid overlaps with other nodes
+      const adjustedPosition = findOptimalPosition(
+        preferredX,
+        preferredY,
+        DECLARATION_NODE_WIDTH,
+        DECLARATION_NODE_HEIGHT,
+        occupiedPositions,
+        functionNodes,
+        positionedDeclarations
+      );
 
       const positionedNode = {
         ...declNode,
-        position: {
-          x: xPosition,
-          y: yPosition,
-        },
+        position: adjustedPosition,
         zIndex: 5,
         style: {
           ...declNode.style,
-          width: 350,
-          height: 200,
+          width: DECLARATION_NODE_WIDTH,
+          height: DECLARATION_NODE_HEIGHT,
         },
       };
 
       positionedDeclarations.push(positionedNode);
-      globalDeclarationIndex++;
+
+      // Mark this position as occupied
+      occupiedPositions.set(declNode.id, {
+        x: adjustedPosition.x,
+        y: adjustedPosition.y,
+        width: DECLARATION_NODE_WIDTH,
+        height: DECLARATION_NODE_HEIGHT,
+      });
     });
   });
 
-  // CRITICAL CHECK: Kiểm tra duplicate positions
-  const positionMap = new Map<string, Node[]>();
-  positionedDeclarations.forEach((node) => {
-    const posKey = `${node.position.x},${node.position.y}`;
-    if (!positionMap.has(posKey)) {
-      positionMap.set(posKey, []);
-    }
-    positionMap.get(posKey)!.push(node);
-  });
+  // Handle declarations without callers
+  const unplacedDeclarations = declarationNodes.filter(
+    (decl) => !positionedDeclarations.some((placed) => placed.id === decl.id)
+  );
 
-  let hasDuplicates = false;
-  positionMap.forEach((nodes, position) => {
-    if (nodes.length > 1) {
-      hasDuplicates = true;
-      console.error(`   ❌ DUPLICATE POSITION DETECTED: ${position}`);
-      console.error(`      ${nodes.length} nodes at same position:`);
-      nodes.forEach((node) => {
-        console.error(`         - ${node.id} (${(node.data as any).label})`);
-      });
-    }
-  });
+  if (unplacedDeclarations.length > 0) {
+    console.warn(
+      `   ⚠️ Placing ${unplacedDeclarations.length} declarations without callers at default positions`
+    );
+
+    let fallbackX = 100;
+    let fallbackY = 100;
+
+    unplacedDeclarations.forEach((declNode, index) => {
+      const column = index % 3;
+      const row = Math.floor(index / 3);
+
+      const positionedNode = {
+        ...declNode,
+        position: {
+          x: fallbackX + column * (DECLARATION_NODE_WIDTH + MIN_NODE_SPACING),
+          y: fallbackY + row * (DECLARATION_NODE_HEIGHT + MIN_NODE_SPACING),
+        },
+        zIndex: 5,
+        style: {
+          ...declNode.style,
+          width: DECLARATION_NODE_WIDTH,
+          height: DECLARATION_NODE_HEIGHT,
+        },
+      };
+
+      positionedDeclarations.push(positionedNode);
+    });
+  }
 
   return positionedDeclarations;
+}
+
+// ==================== HELPER: ENSURE CONTAINER SPACING ====================
+function ensureContainerSpacing(containers: any[]): any[] {
+  const adjustedContainers = [...containers];
+
+  for (let i = 0; i < adjustedContainers.length; i++) {
+    for (let j = i + 1; j < adjustedContainers.length; j++) {
+      const containerA = adjustedContainers[i];
+      const containerB = adjustedContainers[j];
+
+      if (containersOverlap(containerA, containerB)) {
+        // Move containerB to avoid overlap
+        const moveRight =
+          containerA.position.x + containerA.data.width + MIN_CONTAINER_SPACING;
+        const moveDown =
+          containerA.position.y +
+          containerA.data.height +
+          MIN_CONTAINER_SPACING;
+
+        // Choose the direction that creates less movement
+        const currentDistanceX = Math.abs(
+          containerA.position.x - containerB.position.x
+        );
+        const currentDistanceY = Math.abs(
+          containerA.position.y - containerB.position.y
+        );
+
+        if (currentDistanceX < currentDistanceY) {
+          containerB.position.x = moveRight;
+        } else {
+          containerB.position.y = moveDown;
+        }
+
+        console.log(`   🔄 Adjusted container position to avoid overlap`);
+      }
+    }
+  }
+
+  return adjustedContainers;
+}
+
+function containersOverlap(containerA: any, containerB: any): boolean {
+  return (
+    containerA.position.x < containerB.position.x + containerB.data.width &&
+    containerA.position.x + containerA.data.width > containerB.position.x &&
+    containerA.position.y < containerB.position.y + containerB.data.height &&
+    containerA.position.y + containerA.data.height > containerB.position.y
+  );
 }
 
 // ==================== DAGRE ====================
