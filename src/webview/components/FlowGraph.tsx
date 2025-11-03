@@ -58,16 +58,11 @@ interface FlowGraphProps {
 }
 
 import DeclarationNode from "./DeclarationNode";
-import CallOrderEdge from "./CallOrderEdge.tsx";
 
 const nodeTypes = {
   functionNode: FunctionNode as React.ComponentType<any>,
   declarationNode: DeclarationNode as React.ComponentType<any>,
   fileGroupContainer: FileGroupContainer as React.ComponentType<any>,
-};
-
-const edgeTypes = {
-  calls: CallOrderEdge, // ✅ Custom edge cho type "calls"
 };
 
 // Custom debounce hook
@@ -721,10 +716,12 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           const sourceExists = flowNodes.some((n) => n.id === edge.source);
           const targetExists = flowNodes.some((n) => n.id === edge.target);
 
+          // CRITICAL: Keep "uses" edges (FunctionNode -> DeclarationNode)
           if (edge.type === "uses") {
             return sourceExists && targetExists;
           }
 
+          // Keep "calls" edges (FunctionNode -> FunctionNode)
           return sourceExists && targetExists;
         })
         .map((edge, index) => {
@@ -740,10 +737,10 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
                 strokeLinecap: "round" as const,
               }
             : {
-                stroke: "#888",
+                stroke: "#888", // Màu nhạt hơn cho dashed
                 strokeWidth: 2,
                 strokeLinecap: "round" as const,
-                strokeDasharray: "8 4",
+                strokeDasharray: "8 4", // Nét đứt rõ ràng hơn
               };
 
           if (sourceNode && targetNode) {
@@ -769,7 +766,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               dashed: !hasReturnValue,
               solid: hasReturnValue,
               hasReturnValue: hasReturnValue,
-              callOrder: edge.data?.callOrder, // ✅ Truyền callOrder
             },
             pathOptions: {
               borderRadius: 20,
@@ -1097,7 +1093,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           onEdgesChange={onEdgesChange}
           onNodeClick={onNodeClick}
           nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
           fitView
           minZoom={0.1}
           maxZoom={2}
