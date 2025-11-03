@@ -59,6 +59,7 @@ interface FlowGraphProps {
 
 import DeclarationNode from "./DeclarationNode";
 import CallOrderEdge from "./CallOrderEdge";
+import { EdgeHandleOptimizer } from "../utils/EdgeHandleOptimizer";
 
 const nodeTypes = {
   functionNode: FunctionNode as React.ComponentType<any>,
@@ -787,10 +788,70 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             `[convertToFlowData] ✅ Edge ${edge.source}->${edge.target} assigned type="${edgeType}"`
           );
 
+          // ✅ MỚI: SMART EDGE HANDLE OPTIMIZATION
+          let sourceHandle = "right"; // Fallback mặc định
+          let targetHandle = "left"; // Fallback mặc định
+
+          try {
+            // Tìm flow nodes tương ứng để lấy thông tin vị trí
+            const sourceFlowNode = flowNodes.find((n) => n.id === edge.source);
+            const targetFlowNode = flowNodes.find((n) => n.id === edge.target);
+
+            if (sourceFlowNode && targetFlowNode) {
+              const optimizedHandles =
+                EdgeHandleOptimizer.calculateOptimalHandles(
+                  {
+                    id: sourceFlowNode.id,
+                    position: sourceFlowNode.position,
+                    width: (sourceFlowNode.style?.width as number) || 650,
+                    height: (sourceFlowNode.style?.height as number) || 320,
+                    type: sourceFlowNode.type || "functionNode",
+                  },
+                  {
+                    id: targetFlowNode.id,
+                    position: targetFlowNode.position,
+                    width: (targetFlowNode.style?.width as number) || 650,
+                    height: (targetFlowNode.style?.height as number) || 320,
+                    type: targetFlowNode.type || "functionNode",
+                  },
+                  detectedFramework?.strategy.direction || "TB"
+                );
+
+              sourceHandle = optimizedHandles.sourceHandle;
+              targetHandle = optimizedHandles.targetHandle;
+
+              Logger.info(
+                `[convertToFlowData] 🎯 Optimized edge handles: ${edge.source}(${sourceHandle}) -> ${edge.target}(${targetHandle}) | priority: ${optimizedHandles.priority}`
+              );
+            } else {
+              Logger.warn(
+                `[convertToFlowData] ⚠️ Could not find flow nodes for edge optimization: ${edge.source} -> ${edge.target}`
+              );
+
+              // Fallback logic cho edge types đặc biệt
+              if (edge.type === "uses") {
+                // DeclarationNode edges: ưu tiên right->left
+                sourceHandle = "right";
+                targetHandle = "left";
+              }
+            }
+          } catch (error) {
+            Logger.error(
+              `[convertToFlowData] ❌ Edge handle optimization failed for ${edge.source}->${edge.target}:`,
+              error
+            );
+
+            // Fallback an toàn
+            sourceHandle = "right";
+            targetHandle = "left";
+          }
+
           return {
             id: `edge-${edge.source}-${edge.target}-${index}`,
             source: edge.source,
             target: edge.target,
+            sourceHandle, // ✅ SMART HANDLE
+            targetHandle, // ✅ SMART HANDLE
             type: edgeType,
             animated: false,
             style: edgeStyle,
@@ -800,6 +861,8 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               hasReturnValue: hasReturnValue,
               callOrder: callOrder,
               returnOrder: returnOrder,
+              optimized: true, // ✅ Đánh dấu edge đã được tối ưu
+              handlePriority: (edge as any).handlePriority || 0,
             },
             pathOptions: {
               borderRadius: 20,
