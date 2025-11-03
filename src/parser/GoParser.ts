@@ -73,53 +73,28 @@ export class GoParser {
           }
         }
 
-        // Tìm declaration usages
-        Logger.debug(
-          `[parseFile PASS2] Processing function: ${functionNode.id}`
-        );
-
         const declarations = await this.findDeclarationUsages(
           document,
           symbol,
           declarationSymbols
         );
 
-        Logger.debug(
-          `[parseFile PASS2] Found ${declarations.length} declaration usages for ${functionNode.id}`
-        );
-
         for (const { declarationSymbol, usageCount } of declarations) {
           const declType = this.getNodeType(declarationSymbol.kind);
           const declId = `${declType}_${declarationSymbol.name}`;
-
-          Logger.debug(
-            `[parseFile PASS2] Processing declaration: ${declId} (usageCount: ${usageCount})`
-          );
 
           if (!declarationUsageMap.has(declId)) {
             declarationUsageMap.set(declId, new Set());
           }
           declarationUsageMap.get(declId)!.add(functionNode.id);
 
-          // ✅ LƯU THÔNG TIN DECLARATION SYMBOL ĐỂ TẠO NODE SAU
+          // LƯU THÔNG TIN DECLARATION SYMBOL ĐỂ TẠO NODE SAU
           const symbolKey = `${declId}_symbol`;
           if (!declarationUsageMap.has(symbolKey)) {
             (declarationUsageMap as any).set(symbolKey, declarationSymbol);
-            Logger.debug(
-              `[parseFile PASS2] ✅ Saved symbol: "${symbolKey}" (name: ${declarationSymbol.name})`
-            );
-          } else {
-            Logger.debug(
-              `[parseFile PASS2] ⚠️ Symbol already exists: "${symbolKey}"`
-            );
           }
         }
       }
-
-      // === PASS 3: Tạo DeclarationNodes dựa trên usage ===
-      Logger.debug(
-        `[parseFile PASS3] declarationUsageMap size: ${declarationUsageMap.size}`
-      );
 
       const symbolStorage = new Map<string, vscode.DocumentSymbol>();
       const usageStorage = new Map<string, Set<string>>();
@@ -128,19 +103,10 @@ export class GoParser {
         if (key.endsWith("_symbol")) {
           const baseKey = key.replace("_symbol", "");
           symbolStorage.set(baseKey, value as any);
-          Logger.debug(`[parseFile PASS3] Stored symbol for: ${baseKey}`);
         } else if (value instanceof Set) {
           usageStorage.set(key, value);
-          Logger.debug(
-            `[parseFile PASS3] Stored usages for: ${key} (${value.size} functions)`
-          );
         }
       });
-
-      Logger.debug(
-        `[parseFile PASS3] symbolStorage size: ${symbolStorage.size}`
-      );
-      Logger.debug(`[parseFile PASS3] usageStorage size: ${usageStorage.size}`);
 
       let declarationIndex = 0;
       usageStorage.forEach((usedByFunctions, baseDeclarationId) => {
@@ -152,10 +118,6 @@ export class GoParser {
           );
           return;
         }
-
-        Logger.debug(
-          `[parseFile PASS3] ✅ Processing: ${baseDeclarationId} (used by ${usedByFunctions.size} functions)`
-        );
 
         usedByFunctions.forEach((functionId) => {
           const uniqueDeclarationId = `${baseDeclarationId}_usage_${declarationIndex++}`;
@@ -177,16 +139,8 @@ export class GoParser {
             target: uniqueDeclarationId,
             type: "uses",
           });
-
-          Logger.debug(
-            `[parseFile PASS3] ✅ Created DeclarationNode: ${uniqueDeclarationId} for ${functionId}`
-          );
         });
       });
-
-      Logger.debug(
-        `[parseFile PASS3] FINAL - Created ${declarationIndex} DeclarationNodes`
-      );
 
       // Validate edges
       const validNodeIds = new Set(nodes.map((n) => n.id));
@@ -436,11 +390,7 @@ export class GoParser {
   ): Promise<
     Array<{ declarationSymbol: vscode.DocumentSymbol; usageCount: number }>
   > {
-    Logger.debug(
-      `[findDeclarationUsages] START - Function: ${symbol.name} in ${document.fileName}`
-    );
-
-    // ✅ BƯỚC 1: Lấy receiver type (nếu là method) để filter ra khỏi detection
+    // BƯỚC 1: Lấy receiver type (nếu là method) để filter ra khỏi detection
     const receiverType = this.extractReceiverType(symbol.name);
 
     const usages: Map<
@@ -455,7 +405,7 @@ export class GoParser {
     const text = document.getText(symbol.range);
     const lines = text.split("\n");
 
-    // ✅ Regex cải tiến: CHỈ match type declarations trong valid contexts
+    // Regex cải tiến: CHỈ match type declarations trong valid contexts
     // Valid contexts:
     // 1. var/const declaration: var req CreateCourseBookRequest
     // 2. Short var declaration: req := courseDTO.CreateCourseBookRequest{...}
@@ -478,26 +428,20 @@ export class GoParser {
         const charIndex = match.index;
         totalMatches++;
 
-        // ✅ BƯỚC 2.1: Bỏ qua receiver type (nếu là method)
+        // BƯỚC 2.1: Bỏ qua receiver type (nếu là method)
         if (receiverType && typeName === receiverType) {
-          Logger.debug(
-            `[findDeclarationUsages] ⚠️ SKIP: "${typeName}" is receiver type of method "${symbol.name}"`
-          );
           continue;
         }
 
-        // ✅ BƯỚC 2.2: Filter out struct field assignments
+        // BƯỚC 2.2: Filter out struct field assignments
         // Pattern: "FieldName: value" (có dấu : ngay sau)
         const afterMatch = line.substring(charIndex + typeName.length).trim();
         if (afterMatch.startsWith(":")) {
           skippedFieldAssignments++;
-          Logger.debug(
-            `[findDeclarationUsages] ⚠️ SKIP: "${typeName}" is struct field assignment at line ${lineIndex}, char ${charIndex}`
-          );
           continue;
         }
 
-        // ✅ BƯỚC 2.3: Bỏ qua isolated field names (không có context)
+        // BƯỚC 2.3: Bỏ qua isolated field names (không có context)
         const beforeMatch = line.substring(0, charIndex).trim();
 
         // Nếu trước đó chỉ có whitespace/tab → có thể là field assignment
@@ -509,24 +453,17 @@ export class GoParser {
           }
         }
 
-        // ✅ BƯỚC 2: Bỏ qua receiver type (nếu là method)
+        // BƯỚC 2: Bỏ qua receiver type (nếu là method)
         if (receiverType && typeName === receiverType) {
-          Logger.debug(
-            `[findDeclarationUsages] ⚠️ SKIP: "${typeName}" is receiver type of method "${symbol.name}"`
-          );
           continue;
         }
-
-        Logger.debug(
-          `[findDeclarationUsages] Match #${totalMatches}: "${typeName}" at line ${lineIndex}, char ${charIndex}`
-        );
 
         // Calculate absolute position in document
         const absoluteLine = symbol.range.start.line + lineIndex;
         const position = new vscode.Position(absoluteLine, charIndex);
 
         try {
-          // ✅ DÙNG DEFINITION PROVIDER ĐỂ RESOLVE CROSS-FILE
+          // DÙNG DEFINITION PROVIDER ĐỂ RESOLVE CROSS-FILE
           const definitions = await vscode.commands.executeCommand<
             vscode.Location[]
           >("vscode.executeDefinitionProvider", document.uri, position);
@@ -536,12 +473,6 @@ export class GoParser {
             const def = definitions[0];
             const defFilePath = def.uri.fsPath;
 
-            Logger.debug(
-              `[findDeclarationUsages] ✅ Resolved "${typeName}" -> ${defFilePath}:${
-                def.range.start.line + 1
-              }`
-            );
-
             // Bỏ qua stdlib và vendor
             if (
               defFilePath.includes("/usr/local/go/") ||
@@ -550,9 +481,6 @@ export class GoParser {
               defFilePath.includes("/vendor/") ||
               !defFilePath.endsWith(".go")
             ) {
-              Logger.debug(
-                `[findDeclarationUsages] ⚠️ SKIP: "${typeName}" is stdlib/vendor`
-              );
               continue;
             }
 
@@ -571,25 +499,10 @@ export class GoParser {
               );
 
               if (targetSymbol) {
-                Logger.debug(
-                  `[findDeclarationUsages] Found symbol: "${
-                    targetSymbol.name
-                  }" (kind: ${vscode.SymbolKind[targetSymbol.kind]})`
-                );
-
-                // ✅ VERIFY: CHỈ TRACK DECLARATIONS (struct, interface, class, enum, type)
+                // VERIFY: CHỈ TRACK DECLARATIONS (struct, interface, class, enum, type)
                 if (this.isDeclaration(targetSymbol)) {
                   validDeclarations++;
                   const key = `${targetSymbol.kind}_${targetSymbol.name}`;
-
-                  Logger.debug(
-                    `[findDeclarationUsages] ✅ VALID DECLARATION: "${
-                      targetSymbol.name
-                    }" (kind: ${
-                      vscode.SymbolKind[targetSymbol.kind]
-                    }, key: ${key})`
-                  );
-
                   if (!usages.has(key)) {
                     usages.set(key, {
                       symbol: targetSymbol,
@@ -599,12 +512,6 @@ export class GoParser {
                   }
 
                   usages.get(key)!.count++;
-                } else {
-                  Logger.debug(
-                    `[findDeclarationUsages] ❌ NOT a declaration: "${
-                      targetSymbol.name
-                    }" (kind: ${vscode.SymbolKind[targetSymbol.kind]})`
-                  );
                 }
               } else {
                 Logger.warn(
@@ -616,10 +523,6 @@ export class GoParser {
                 `[findDeclarationUsages] ⚠️ No symbols found in file: ${defFilePath}`
               );
             }
-          } else {
-            Logger.debug(
-              `[findDeclarationUsages] ❌ No definition found for "${typeName}"`
-            );
           }
         } catch (error) {
           Logger.error(
@@ -630,22 +533,10 @@ export class GoParser {
       }
     }
 
-    Logger.debug(`[findDeclarationUsages] SUMMARY for ${symbol.name}:`, {
-      totalMatches,
-      resolvedDefinitions,
-      validDeclarations,
-      usagesFound: usages.size,
-      skippedFieldAssignments,
-    });
-
     const result = Array.from(usages.values()).map((usage) => ({
       declarationSymbol: usage.symbol,
       usageCount: usage.count,
     }));
-
-    Logger.debug(
-      `[findDeclarationUsages] END - Returning ${result.length} declaration usages`
-    );
 
     return result;
   }
@@ -753,18 +644,11 @@ export class GoParser {
               symbol: declarationSymbol,
               document: currentDoc,
             });
-            Logger.debug(
-              `[parseFunctionWithDependencies PASS2] ✅ Saved symbol: "${declId}" (name: ${declarationSymbol.name}, file: ${currentDoc.fileName})`
-            );
           }
         }
       }
 
       // Step 3: Tạo DeclarationNodes dựa trên usage
-      Logger.debug(
-        `[parseFunctionWithDependencies PASS3] Starting with ${declarationUsageMap.size} base declarations`
-      );
-
       let declarationIndex = 0;
       declarationUsageMap.forEach((usedByFunctions, baseDeclarationId) => {
         const declarationInfo = declarationSymbolMap.get(baseDeclarationId);
@@ -778,10 +662,6 @@ export class GoParser {
 
         const { symbol: declarationSymbol, document: declDocument } =
           declarationInfo;
-
-        Logger.debug(
-          `[parseFunctionWithDependencies PASS3] ✅ Processing: ${baseDeclarationId} (used by ${usedByFunctions.size} functions)`
-        );
 
         usedByFunctions.forEach((functionId) => {
           const uniqueDeclarationId = `${baseDeclarationId}_usage_${declarationIndex++}`;
@@ -802,16 +682,8 @@ export class GoParser {
             target: uniqueDeclarationId,
             type: "uses",
           });
-
-          Logger.debug(
-            `[parseFunctionWithDependencies PASS3] ✅ Created DeclarationNode: ${uniqueDeclarationId} for ${functionId}`
-          );
         });
       });
-
-      Logger.debug(
-        `[parseFunctionWithDependencies PASS3] FINAL - Created ${declarationIndex} DeclarationNodes`
-      );
 
       return {
         nodes: Array.from(allNodes.values()),

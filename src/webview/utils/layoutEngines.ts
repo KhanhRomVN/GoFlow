@@ -28,7 +28,7 @@ interface FileGroup {
 function groupNodesByFile(nodes: Node[], edges: Edge[]): FileGroup[] {
   const nodesByFile = new Map<string, Node[]>();
 
-  // Group ONLY FunctionNodes by file (DeclarationNodes are NOT grouped)
+  // Group FunctionNodes by file
   nodes.forEach((node) => {
     if (node.type === "functionNode") {
       const file = (node.data as any).file;
@@ -36,6 +36,27 @@ function groupNodesByFile(nodes: Node[], edges: Edge[]): FileGroup[] {
         nodesByFile.set(file, []);
       }
       nodesByFile.get(file)!.push(node);
+    }
+  });
+
+  // Group DeclarationNodes by caller's file
+  nodes.forEach((node) => {
+    if (node.type === "declarationNode") {
+      const declData = node.data as any;
+      const usedBy = declData.usedBy || [];
+
+      // Tìm caller FunctionNode đầu tiên
+      const callerNode = nodes.find(
+        (n) => n.type === "functionNode" && usedBy.includes(n.id)
+      );
+
+      if (callerNode) {
+        const callerFile = (callerNode.data as any).file;
+        if (!nodesByFile.has(callerFile)) {
+          nodesByFile.set(callerFile, []);
+        }
+        nodesByFile.get(callerFile)!.push(node);
+      }
     }
   });
 
@@ -83,6 +104,8 @@ function getCrossFileEdges(groups: FileGroup[], allEdges: Edge[]): Edge[] {
 }
 
 // ==================== HELPER: PLACE DECLARATION NODES NEAR CALLERS ====================
+// ==================== HELPER: PLACE DECLARATION NODES NEAR CALLERS ====================
+// ==================== HELPER: PLACE DECLARATION NODES NEAR CALLERS ====================
 function placeDeclarationNodesNearCallers(
   functionNodes: Node[],
   declarationNodes: Node[],
@@ -90,8 +113,16 @@ function placeDeclarationNodesNearCallers(
 ): Node[] {
   const positionedDeclarations: Node[] = [];
 
-  declarationNodes.forEach((declNode) => {
-    // Tìm FunctionNode sử dụng DeclarationNode này
+  // Group declarations by caller to stack them vertically if multiple declarations per function
+  const declarationsByFunction = new Map<string, Node[]>();
+
+  declarationNodes.forEach((declNode, declIndex) => {
+    // CRITICAL DEBUG: Check if this declaration has ANY incoming edges
+    const allIncomingEdges = edges.filter(
+      (edge) => edge.target === declNode.id
+    );
+
+    // Tìm FunctionNode sử dụng DeclarationNode này (edge type = "uses")
     const callerEdge = edges.find(
       (edge) => edge.target === declNode.id && edge.type === "uses"
     );
@@ -100,29 +131,87 @@ function placeDeclarationNodesNearCallers(
       const callerNode = functionNodes.find((n) => n.id === callerEdge.source);
 
       if (callerNode) {
-        // Đặt DeclarationNode bên phải FunctionNode, offset nhẹ
-        const offsetX = 120; // Khoảng cách ngang
-        const offsetY = -50; // Offset nhẹ theo chiều dọc
-
-        positionedDeclarations.push({
-          ...declNode,
-          position: {
-            x: callerNode.position.x + CODE_NODE_WIDTH + offsetX,
-            y: callerNode.position.y + offsetY,
-          },
-          zIndex: 10,
-          style: {
-            ...declNode.style,
-            width: 350,
-            height: 200,
-          },
-        });
-        return;
+        if (!declarationsByFunction.has(callerNode.id)) {
+          declarationsByFunction.set(callerNode.id, []);
+        }
+        declarationsByFunction.get(callerNode.id)!.push(declNode);
+      } else {
+        console.warn(`   ⚠️ Caller node not found: ${callerEdge.source}`);
       }
+    } else {
+      // Fallback: nếu không tìm thấy caller, đặt ở vị trí mặc định (góc trên trái)
+      console.warn(
+        `   ⚠️ No caller edge found - placing at default position (0, 0)`
+      );
+      console.warn(
+        `   🔍 Expected edge pattern: <any_function_id> -> ${declNode.id} with type="uses"`
+      );
+      positionedDeclarations.push({
+        ...declNode,
+        position: { x: 0, y: 0 },
+        zIndex: 5,
+      });
+    }
+  });
+
+  // Đặt declarations theo từng function caller
+  let globalDeclarationIndex = 0;
+
+  declarationsByFunction.forEach((declarations, functionId) => {
+    const callerNode = functionNodes.find((n) => n.id === functionId);
+    if (!callerNode) {
+      console.error(`   ❌ Caller node not found for ${functionId}`);
+      return;
     }
 
-    // Fallback: nếu không tìm thấy caller, đặt ở vị trí mặc định
-    positionedDeclarations.push(declNode);
+    const offsetX = 120; // Khoảng cách ngang từ FunctionNode
+    const baseOffsetY = -50; // Offset ban đầu theo chiều dọc
+    const stackSpacing = 220; // Khoảng cách giữa các declarations (DeclarationNode height ~200px)
+
+    declarations.forEach((declNode, index) => {
+      const yPosition =
+        callerNode.position.y + baseOffsetY + index * stackSpacing;
+      const xPosition = callerNode.position.x + CODE_NODE_WIDTH + offsetX;
+
+      const positionedNode = {
+        ...declNode,
+        position: {
+          x: xPosition,
+          y: yPosition,
+        },
+        zIndex: 5,
+        style: {
+          ...declNode.style,
+          width: 350,
+          height: 200,
+        },
+      };
+
+      positionedDeclarations.push(positionedNode);
+      globalDeclarationIndex++;
+    });
+  });
+
+  // CRITICAL CHECK: Kiểm tra duplicate positions
+  const positionMap = new Map<string, Node[]>();
+  positionedDeclarations.forEach((node) => {
+    const posKey = `${node.position.x},${node.position.y}`;
+    if (!positionMap.has(posKey)) {
+      positionMap.set(posKey, []);
+    }
+    positionMap.get(posKey)!.push(node);
+  });
+
+  let hasDuplicates = false;
+  positionMap.forEach((nodes, position) => {
+    if (nodes.length > 1) {
+      hasDuplicates = true;
+      console.error(`   ❌ DUPLICATE POSITION DETECTED: ${position}`);
+      console.error(`      ${nodes.length} nodes at same position:`);
+      nodes.forEach((node) => {
+        console.error(`         - ${node.id} (${(node.data as any).label})`);
+      });
+    }
   });
 
   return positionedDeclarations;
@@ -273,18 +362,23 @@ export function layoutWithDagre(
     const groupOffsetY =
       superNode.y - (bounds.height + FILE_GROUP_PADDING * 2) / 2;
 
-    // Adjust all nodes in this group
+    // Adjust ONLY FunctionNodes in this group (filter out DeclarationNodes)
     bounds.nodes.forEach((node) => {
-      finalFunctionNodes.push({
-        ...node,
-        position: {
-          x: node.position.x - bounds.minX + groupOffsetX + FILE_GROUP_PADDING,
-          y: node.position.y - bounds.minY + groupOffsetY + FILE_GROUP_PADDING,
-        },
-      });
+      if (node.type === "functionNode") {
+        finalFunctionNodes.push({
+          ...node,
+          position: {
+            x:
+              node.position.x - bounds.minX + groupOffsetX + FILE_GROUP_PADDING,
+            y:
+              node.position.y - bounds.minY + groupOffsetY + FILE_GROUP_PADDING,
+          },
+        });
+      }
     });
   });
 
+  // CRITICAL: Place DeclarationNodes AFTER FunctionNodes have been positioned
   const positionedDeclarations = placeDeclarationNodesNearCallers(
     finalFunctionNodes,
     declarationNodes,
@@ -446,18 +540,21 @@ export async function layoutWithELK(
     const groupOffsetX = (superNode?.x || 0) + FILE_GROUP_PADDING;
     const groupOffsetY = (superNode?.y || 0) + FILE_GROUP_PADDING;
 
+    // Adjust ONLY FunctionNodes in this group
     bounds.nodes.forEach((node) => {
-      finalFunctionNodes.push({
-        ...node,
-        position: {
-          x: node.position.x - bounds.minX + groupOffsetX,
-          y: node.position.y - bounds.minY + groupOffsetY,
-        },
-      });
+      if (node.type === "functionNode") {
+        finalFunctionNodes.push({
+          ...node,
+          position: {
+            x: node.position.x - bounds.minX + groupOffsetX,
+            y: node.position.y - bounds.minY + groupOffsetY,
+          },
+        });
+      }
     });
   });
 
-  // Place DeclarationNodes near their callers
+  // CRITICAL: Place DeclarationNodes AFTER FunctionNodes have been positioned
   const positionedDeclarations = placeDeclarationNodesNearCallers(
     finalFunctionNodes,
     declarationNodes,
@@ -612,18 +709,21 @@ export function layoutWithD3Force(
     const offsetX = superNode.x - bounds.centerX;
     const offsetY = superNode.y - bounds.centerY;
 
+    // Adjust ONLY FunctionNodes
     bounds.nodes.forEach((node: Node) => {
-      finalFunctionNodes.push({
-        ...node,
-        position: {
-          x: node.position.x + offsetX,
-          y: node.position.y + offsetY,
-        },
-      });
+      if (node.type === "functionNode") {
+        finalFunctionNodes.push({
+          ...node,
+          position: {
+            x: node.position.x + offsetX,
+            y: node.position.y + offsetY,
+          },
+        });
+      }
     });
   });
 
-  // Place DeclarationNodes near their callers
+  // CRITICAL: Place DeclarationNodes AFTER FunctionNodes have been positioned
   const positionedDeclarations = placeDeclarationNodesNearCallers(
     finalFunctionNodes,
     declarationNodes,
@@ -641,10 +741,12 @@ export async function applyLayout(
   edges: Edge[],
   strategy: LayoutStrategy
 ): Promise<{ nodes: Node[]; edges: Edge[] }> {
-  // Update edge types - PRESERVE strokeDasharray from original edge
+  // Update edge styles - PRESERVE ORIGINAL EDGE TYPE (CRITICAL for "uses" edges)
   const styledEdges = edges.map((edge) => ({
     ...edge,
-    type: strategy.edgeType,
+    // CRITICAL: KHÔNG override edge.type nếu đã có (giữ "uses", "calls", v.v.)
+    // Chỉ set default type nếu edge.type === undefined
+    type: edge.type || strategy.edgeType,
     style: {
       ...edge.style,
       stroke: edge.style?.stroke || "#666",

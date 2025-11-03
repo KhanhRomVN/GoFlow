@@ -549,6 +549,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
       const containerNodes: FlowNode[] = [];
       const nodesByFile = new Map<string, FlowNode[]>();
 
+      // Group BOTH FunctionNodes AND DeclarationNodes by file
       nodes.forEach((node) => {
         if (node.type === "functionNode") {
           const file = (node.data as FunctionNodeData).file;
@@ -556,6 +557,23 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             nodesByFile.set(file, []);
           }
           nodesByFile.get(file)!.push(node);
+        } else if (node.type === "declarationNode") {
+          // DeclarationNode phải nằm trong FileGroupContainer của caller function
+          const declData = node.data as DeclarationNodeData;
+          const usedBy = declData.usedBy || [];
+
+          // Tìm caller FunctionNode đầu tiên
+          const callerNode = nodes.find(
+            (n) => n.type === "functionNode" && usedBy.includes(n.id)
+          );
+
+          if (callerNode) {
+            const callerFile = (callerNode.data as FunctionNodeData).file;
+            if (!nodesByFile.has(callerFile)) {
+              nodesByFile.set(callerFile, []);
+            }
+            nodesByFile.get(callerFile)!.push(node);
+          }
         }
       });
 
@@ -569,15 +587,15 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         let maxY = -Infinity;
 
         fileNodes.forEach((node) => {
-          const nodeWidth = node.style?.width || 650;
-          const nodeHeight = node.style?.height || 320;
+          const nodeWidth = (node.style?.width as number) || 650;
+          const nodeHeight = (node.style?.height as number) || 320;
           const x = node.position.x;
           const y = node.position.y;
 
           minX = Math.min(minX, x);
           minY = Math.min(minY, y);
-          maxX = Math.max(maxX, x + (nodeWidth as number));
-          maxY = Math.max(maxY, y + (nodeHeight as number));
+          maxX = Math.max(maxX, x + nodeWidth);
+          maxY = Math.max(maxY, y + nodeHeight);
         });
 
         const containerWidth = maxX - minX + padding * 2;
@@ -707,6 +725,13 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         .filter((edge) => {
           const sourceExists = flowNodes.some((n) => n.id === edge.source);
           const targetExists = flowNodes.some((n) => n.id === edge.target);
+
+          // CRITICAL: Keep "uses" edges (FunctionNode -> DeclarationNode)
+          if (edge.type === "uses") {
+            return sourceExists && targetExists;
+          }
+
+          // Keep "calls" edges (FunctionNode -> FunctionNode)
           return sourceExists && targetExists;
         })
         .map((edge, index) => {
@@ -728,22 +753,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
                 strokeDasharray: "8 4", // Nét đứt rõ ràng hơn
               };
 
-          const finalEdge = {
-            id: `edge-${edge.source}-${edge.target}-${index}`,
-            source: edge.source,
-            target: edge.target,
-            type: "default",
-            animated: false,
-            style: edgeStyle,
-            data: {
-              hasReturnValue: hasReturnValue,
-            },
-            pathOptions: {
-              borderRadius: 20,
-              curvature: 0.5,
-            },
-          };
-
           if (sourceNode && targetNode) {
             edgeConnections.push({
               source: edge.source,
@@ -760,7 +769,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             id: `edge-${edge.source}-${edge.target}-${index}`,
             source: edge.source,
             target: edge.target,
-            type: "default",
+            type: edge.type || "default",
             animated: false,
             style: edgeStyle,
             data: {
@@ -1054,9 +1063,9 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
                 return false;
               }
 
+              // CRITICAL FIX: Check if ANY caller is visible (not just first)
               const hasVisibleCaller = declData.usedBy.some((callerId) => {
-                const callerNode = nodes.find((node) => node.id === callerId);
-                return callerNode && !hiddenNodeIds.has(callerId);
+                return !hiddenNodeIds.has(callerId);
               });
 
               return hasVisibleCaller;
@@ -1064,12 +1073,37 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
 
             if (n.type === "fileGroupContainer") {
               const containerFile = (n.data as any).fileName;
-              const visibleNodesInContainer = nodes.filter(
-                (node) =>
-                  node.type === "functionNode" &&
-                  (node.data as FunctionNodeData).file === containerFile &&
-                  !hiddenNodeIds.has(node.id)
-              );
+
+              // Count visible nodes (both FunctionNodes AND DeclarationNodes)
+              const visibleNodesInContainer = nodes.filter((node) => {
+                if (node.type === "functionNode") {
+                  return (
+                    (node.data as FunctionNodeData).file === containerFile &&
+                    !hiddenNodeIds.has(node.id)
+                  );
+                }
+
+                if (node.type === "declarationNode") {
+                  const declData = node.data as DeclarationNodeData;
+                  const usedBy = declData.usedBy || [];
+
+                  // Check if declaration belongs to this container
+                  const callerNode = nodes.find(
+                    (n) => n.type === "functionNode" && usedBy.includes(n.id)
+                  );
+
+                  if (
+                    callerNode &&
+                    (callerNode.data as FunctionNodeData).file === containerFile
+                  ) {
+                    // Check if caller is visible
+                    return !hiddenNodeIds.has(callerNode.id);
+                  }
+                }
+
+                return false;
+              });
+
               return visibleNodesInContainer.length > 0;
             }
 
