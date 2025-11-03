@@ -21,8 +21,6 @@ import { applyLayout } from "../utils/layoutEngines";
 import { EdgeTracker, EdgeConnection } from "../utils/EdgeTracker";
 import { Logger } from "../../utils/webviewLogger";
 import NodeVisibilityDrawer from "./NodeVisibilityDrawer";
-import FlowPathDrawer from "./FlowPathDrawer";
-import { FlowPathTracker, FlowPath } from "../utils/FlowPathTracker";
 
 interface FunctionNodeData extends Record<string, unknown> {
   id: string;
@@ -121,10 +119,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     }
   });
 
-  // Flow Path Drawer states
-  const [isFlowPathDrawerOpen, setIsFlowPathDrawerOpen] = useState(false);
-  const [flowPaths, setFlowPaths] = useState<FlowPath[]>([]);
-
   // Auto-save hiddenNodeIds to localStorage
   useEffect(() => {
     try {
@@ -137,37 +131,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
       );
     }
   }, [hiddenNodeIds]);
-
-  const handleToggleFlowPathDrawer = useCallback(() => {
-    setIsFlowPathDrawerOpen((prev) => !prev);
-  }, []);
-
-  const handleSelectFlow = useCallback((flowId: string) => {
-    FlowPathTracker.setActiveFlow(flowId);
-
-    const flow = FlowPathTracker.getFlowById(flowId);
-    if (!flow) return;
-
-    // TODO: Highlight all nodes and edges in this flow path
-  }, []);
-
-  const handleDeleteFlow = useCallback((flowId: string) => {
-    FlowPathTracker.deleteFlow(flowId);
-  }, []);
-
-  const handleClearAllFlows = useCallback(() => {
-    FlowPathTracker.clearAllFlows();
-  }, []);
-
-  useEffect(() => {
-    const unsubscribe = FlowPathTracker.subscribe((flows) => {
-      setFlowPaths(flows);
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, []);
 
   // Use debounce for nodes to prevent excessive re-renders
   const debouncedNodes = useDebounce(nodes, 100);
@@ -852,22 +815,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         setNodes(layoutedNodes);
         setEdges(layoutedEdges);
 
-        // Generate flow paths
-        const codeNodes = layoutedNodes
-          .filter((n) => n.type === "functionNode")
-          .map((n) => ({
-            id: n.id,
-            label: (n.data as FunctionNodeData).label,
-            type: (n.data as FunctionNodeData).type,
-            file: (n.data as FunctionNodeData).file,
-            line: (n.data as FunctionNodeData).line,
-          }));
-
-        FlowPathTracker.generateExecutionFlowsFromGraph(
-          codeNodes,
-          layoutedEdges
-        );
-
         setIsLoading(false);
         setError(null);
 
@@ -1180,13 +1127,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           />
           <Panel position="top-right" className="flow-graph-panel">
             <button
-              onClick={handleToggleFlowPathDrawer}
-              className="flow-graph-button flow-graph-button-primary"
-              title="Flow Paths"
-            >
-              🔄
-            </button>
-            <button
               onClick={handleToggleDrawer}
               className="flow-graph-button flow-graph-button-primary"
               title="Node Visibility"
@@ -1282,14 +1222,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         onToggleNode={handleToggleNodeVisibility}
         onShowAll={handleShowAllNodes}
         onHideAll={handleHideAllNodes}
-      />
-      <FlowPathDrawer
-        isOpen={isFlowPathDrawerOpen}
-        onClose={() => setIsFlowPathDrawerOpen(false)}
-        flows={flowPaths}
-        onSelectFlow={handleSelectFlow}
-        onDeleteFlow={handleDeleteFlow}
-        onClearAll={handleClearAllFlows}
       />
     </div>
   );
