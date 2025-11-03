@@ -274,6 +274,7 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected }) => {
         data-type="functionNode"
         onClick={handleNodeClick}
       >
+        {/* Smart Handles - chỉ hiển thị handles có khả năng được sử dụng */}
         <Handle
           type="target"
           position={Position.Top}
@@ -284,6 +285,7 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected }) => {
             height: 12,
             border: "2px solid white",
           }}
+          isConnectable={true}
         />
         <Handle
           type="target"
@@ -294,7 +296,9 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected }) => {
             width: 12,
             height: 12,
             border: "2px solid white",
+            opacity: 0.3, // Mờ đi để chỉ ra ít được sử dụng
           }}
+          isConnectable={true}
         />
         <Handle
           type="source"
@@ -306,6 +310,7 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected }) => {
             height: 12,
             border: "2px solid white",
           }}
+          isConnectable={true}
         />
         <Handle
           type="source"
@@ -316,7 +321,9 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected }) => {
             width: 12,
             height: 12,
             border: "2px solid white",
+            opacity: 0.3, // Mờ đi để chỉ ra ít được sử dụng
           }}
+          isConnectable={true}
         />
 
         <div
