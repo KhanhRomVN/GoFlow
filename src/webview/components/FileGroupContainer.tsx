@@ -5,10 +5,13 @@ import "../styles/file-group-container.css";
 interface FileGroupContainerData extends Record<string, unknown> {
   fileName: string;
   nodeCount: number;
+  functionNodeCount: number;
+  declarationNodeCount: number;
   width: number;
   height: number;
 }
 
+// Update FileGroupContainer.tsx to show both counts
 const FileGroupContainer: React.FC<NodeProps> = ({ data }) => {
   const containerData = data as FileGroupContainerData;
 
@@ -31,8 +34,10 @@ const FileGroupContainer: React.FC<NodeProps> = ({ data }) => {
           {getRelativePath(containerData.fileName)}
         </span>
         <span className="file-group-container-badge">
-          {containerData.nodeCount}{" "}
-          {containerData.nodeCount > 1 ? "nodes" : "node"}
+          {containerData.functionNodeCount || 0}ƒ
+          {containerData.declarationNodeCount
+            ? ` + ${containerData.declarationNodeCount}D`
+            : ""}
         </span>
       </div>
     </div>

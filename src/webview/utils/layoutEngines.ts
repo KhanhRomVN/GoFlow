@@ -13,10 +13,13 @@ import { LayoutStrategy } from "../configs/layoutStrategies";
 const elk = new ELK();
 
 // ==================== CONSTANTS ====================
-const FILE_GROUP_PADDING = 60; // Padding inside file group container
-const FILE_GROUP_MARGIN = 120; // Margin between file group containers
+const FILE_GROUP_PADDING = 70;
+const FILE_GROUP_MARGIN = 150;
 const CODE_NODE_WIDTH = 850;
 const CODE_NODE_HEIGHT = 320;
+const DECLARATION_OFFSET_X = 150;
+const DECLARATION_BASE_OFFSET_Y = -60;
+const DECLARATION_STACK_SPACING = 230;
 
 // ==================== HELPER: GROUP NODES BY FILE ====================
 interface FileGroup {
@@ -28,7 +31,7 @@ interface FileGroup {
 function groupNodesByFile(nodes: Node[], edges: Edge[]): FileGroup[] {
   const nodesByFile = new Map<string, Node[]>();
 
-  // Group FunctionNodes by file
+  // STEP 1: Group FunctionNodes by file
   nodes.forEach((node) => {
     if (node.type === "functionNode") {
       const file = (node.data as any).file;
@@ -39,33 +42,64 @@ function groupNodesByFile(nodes: Node[], edges: Edge[]): FileGroup[] {
     }
   });
 
-  // Group DeclarationNodes by caller's file
+  // STEP 2: CRITICAL FIX - Group DeclarationNodes by CALLER's file
   nodes.forEach((node) => {
     if (node.type === "declarationNode") {
       const declData = node.data as any;
       const usedBy = declData.usedBy || [];
 
-      // Tìm caller FunctionNode đầu tiên
+      // CRITICAL: Tìm caller FunctionNode đầu tiên
       const callerNode = nodes.find(
         (n) => n.type === "functionNode" && usedBy.includes(n.id)
       );
 
       if (callerNode) {
         const callerFile = (callerNode.data as any).file;
+
         if (!nodesByFile.has(callerFile)) {
           nodesByFile.set(callerFile, []);
         }
         nodesByFile.get(callerFile)!.push(node);
+
+        console.log(
+          `  ✅ DeclarationNode "${node.id}" grouped with caller: ${callerFile}`
+        );
+      } else {
+        // THÊM LOG DEBUG
+        console.warn(`  ⚠️ No caller found for DeclarationNode: ${node.id}`);
+        console.warn(`     Expected usedBy:`, usedBy);
+
+        // Fallback: đặt vào file của chính declaration node
+        const declFile = (node.data as any).file;
+        if (!nodesByFile.has(declFile)) {
+          nodesByFile.set(declFile, []);
+        }
+        nodesByFile.get(declFile)!.push(node);
+        console.log(
+          `  🔄 DeclarationNode "${node.id}" fallback to own file: ${declFile}`
+        );
       }
     }
   });
 
-  // Create file groups with internal edges
+  // STEP 3: Create file groups với internal edges
   const fileGroups: FileGroup[] = [];
   nodesByFile.forEach((groupNodes, fileName) => {
     const nodeIds = new Set(groupNodes.map((n) => n.id));
     const internalEdges = edges.filter(
       (edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target)
+    );
+
+    // THÊM LOG ĐẾM SỐ LƯỢNG NODE
+    const functionCount = groupNodes.filter(
+      (n) => n.type === "functionNode"
+    ).length;
+    const declarationCount = groupNodes.filter(
+      (n) => n.type === "declarationNode"
+    ).length;
+
+    console.log(
+      `📁 FileGroup "${fileName}": ${functionCount}F + ${declarationCount}D = ${groupNodes.length} nodes`
     );
 
     fileGroups.push({

@@ -3,7 +3,7 @@ import * as vscode from "vscode";
 import { GraphData, Node, Edge } from "../models/Node";
 import { Logger } from "../utils/logger";
 import { EdgeDetector, EdgeDetectionContext } from "./EdgeDetector";
-import { DeclarationDetector, DeclarationUsage } from "./DeclarationDetector";
+import { DeclarationDetector } from "./DeclarationDetector";
 import { NodeFactory } from "./NodeFactory";
 
 export class GoParser {

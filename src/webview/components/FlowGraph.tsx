@@ -544,12 +544,13 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     });
   }, [setEdges, lineHighlightedEdges, setNodes, getOriginalDashArray]);
 
+  // Update the calculateFileGroupContainers function in FlowGraph.tsx
   const calculateFileGroupContainers = useCallback(
     (nodes: FlowNode[]): FlowNode[] => {
       const containerNodes: FlowNode[] = [];
       const nodesByFile = new Map<string, FlowNode[]>();
 
-      // Group BOTH FunctionNodes AND DeclarationNodes by file
+      // STEP 1: Group FunctionNodes by file
       nodes.forEach((node) => {
         if (node.type === "functionNode") {
           const file = (node.data as FunctionNodeData).file;
@@ -557,26 +558,45 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             nodesByFile.set(file, []);
           }
           nodesByFile.get(file)!.push(node);
-        } else if (node.type === "declarationNode") {
-          // DeclarationNode phải nằm trong FileGroupContainer của caller function
+        }
+      });
+
+      // STEP 2: Group DeclarationNodes by CALLER's file
+      nodes.forEach((node) => {
+        if (node.type === "declarationNode") {
           const declData = node.data as DeclarationNodeData;
           const usedBy = declData.usedBy || [];
 
-          // Tìm caller FunctionNode đầu tiên
+          // CRITICAL: Tìm caller FunctionNode đầu tiên
           const callerNode = nodes.find(
             (n) => n.type === "functionNode" && usedBy.includes(n.id)
           );
 
           if (callerNode) {
             const callerFile = (callerNode.data as FunctionNodeData).file;
+
             if (!nodesByFile.has(callerFile)) {
               nodesByFile.set(callerFile, []);
             }
             nodesByFile.get(callerFile)!.push(node);
+          } else {
+            // THÊM LOG DEBUG - DeclarationNode không có caller
+            console.warn(
+              `  ⚠️ No caller found for DeclarationNode: ${node.id}`
+            );
+            console.warn(`     Expected usedBy:`, usedBy);
+
+            // Fallback: đặt vào file của chính declaration node
+            const declFile = (node.data as DeclarationNodeData).file;
+            if (!nodesByFile.has(declFile)) {
+              nodesByFile.set(declFile, []);
+            }
+            nodesByFile.get(declFile)!.push(node);
           }
         }
       });
 
+      // STEP 3: Calculate bounding box for each file group (including DeclarationNodes)
       nodesByFile.forEach((fileNodes, file) => {
         if (fileNodes.length === 0) return;
 
@@ -587,8 +607,20 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         let maxY = -Infinity;
 
         fileNodes.forEach((node) => {
-          const nodeWidth = (node.style?.width as number) || 650;
-          const nodeHeight = (node.style?.height as number) || 320;
+          // Use appropriate dimensions for different node types
+          let nodeWidth, nodeHeight;
+
+          if (node.type === "functionNode") {
+            nodeWidth = (node.style?.width as number) || 650;
+            nodeHeight = (node.style?.height as number) || 320;
+          } else if (node.type === "declarationNode") {
+            nodeWidth = (node.style?.width as number) || 350;
+            nodeHeight = (node.style?.height as number) || 200;
+          } else {
+            nodeWidth = 650;
+            nodeHeight = 320;
+          }
+
           const x = node.position.x;
           const y = node.position.y;
 
@@ -603,6 +635,14 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
 
         const containerId = `container-${file}`;
 
+        // Count nodes by type for the container
+        const functionNodeCount = fileNodes.filter(
+          (n) => n.type === "functionNode"
+        ).length;
+        const declarationNodeCount = fileNodes.filter(
+          (n) => n.type === "declarationNode"
+        ).length;
+
         containerNodes.push({
           id: containerId,
           type: "fileGroupContainer" as const,
@@ -613,6 +653,8 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           data: {
             fileName: file,
             nodeCount: fileNodes.length,
+            functionNodeCount,
+            declarationNodeCount,
             width: containerWidth,
             height: containerHeight,
           } as any,
@@ -918,15 +960,33 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     const codeNodes = debouncedNodes.filter(
       (n: { type: string }) => n.type === "functionNode"
     );
+    const declarationNodes = debouncedNodes.filter(
+      (n: { type: string }) => n.type === "declarationNode"
+    );
     const currentContainers = debouncedNodes.filter(
       (n: { type: string }) => n.type === "fileGroupContainer"
     );
 
-    if (codeNodes.length === 0) {
+    // THÊM LOG DEBUG
+    console.log(`📊 Container Calculation:`, {
+      functionNodes: codeNodes.length,
+      declarationNodes: declarationNodes.length,
+      currentContainers: currentContainers.length,
+    });
+
+    if (codeNodes.length === 0 && declarationNodes.length === 0) {
       return;
     }
 
-    const containerNodes = calculateFileGroupContainers(codeNodes);
+    const containerNodes = calculateFileGroupContainers(debouncedNodes);
+
+    // LOG KẾT QUẢ
+    containerNodes.forEach((container) => {
+      const data = container.data as any;
+      console.log(
+        `🏷️ Container "${data.fileName}": ${data.functionNodeCount}F + ${data.declarationNodeCount}D`
+      );
+    });
 
     // Create a signature for current state to prevent unnecessary updates
     const currentSignature = JSON.stringify({
@@ -1071,6 +1131,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               return hasVisibleCaller;
             }
 
+            // In the main ReactFlow component's nodes filter
             if (n.type === "fileGroupContainer") {
               const containerFile = (n.data as any).fileName;
 
@@ -1087,16 +1148,18 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
                   const declData = node.data as DeclarationNodeData;
                   const usedBy = declData.usedBy || [];
 
-                  // Check if declaration belongs to this container
+                  // Check if declaration belongs to this container by finding its caller
                   const callerNode = nodes.find(
-                    (n) => n.type === "functionNode" && usedBy.includes(n.id)
+                    (caller) =>
+                      caller.type === "functionNode" &&
+                      usedBy.includes(caller.id)
                   );
 
                   if (
                     callerNode &&
                     (callerNode.data as FunctionNodeData).file === containerFile
                   ) {
-                    // Check if caller is visible
+                    // Check if the caller is visible
                     return !hiddenNodeIds.has(callerNode.id);
                   }
                 }
