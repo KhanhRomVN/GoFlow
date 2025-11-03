@@ -10,7 +10,13 @@ export class NodeFactory {
     const nodeType = this.getNodeType(symbol.kind);
     const cleanName = this.extractCleanFunctionName(symbol.name);
     const id = `${nodeType}_${cleanName}`;
-    const code = document.getText(symbol.range);
+    const startLine = symbol.range.start.line;
+    const endLine = symbol.range.end.line;
+    const functionRange = new vscode.Range(
+      new vscode.Position(startLine, 0),
+      new vscode.Position(endLine, document.lineAt(endLine).text.length)
+    );
+    const code = document.getText(functionRange);
     const language = this.detectLanguage(document.fileName);
     const { returnType, hasReturnValue } = this.analyzeReturnType(
       code,

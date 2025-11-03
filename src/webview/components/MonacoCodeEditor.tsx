@@ -150,7 +150,8 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
           fontSize: 12,
           fontFamily: "'Courier New', monospace",
           lineHeight: 19,
-          lineNumbers: "on",
+          lineNumbers: (editorLineNumber) =>
+            String(lineNumber + editorLineNumber - 1),
           glyphMargin: false,
           folding: false,
           lineDecorationsWidth: 0,
