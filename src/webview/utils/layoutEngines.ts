@@ -63,24 +63,13 @@ function groupNodesByFile(nodes: Node[], edges: Edge[]): FileGroup[] {
           nodesByFile.set(callerFile, []);
         }
         nodesByFile.get(callerFile)!.push(node);
-
-        console.log(
-          `  ✅ DeclarationNode "${node.id}" grouped with caller: ${callerFile}`
-        );
       } else {
-        // THÊM LOG DEBUG
-        console.warn(`  ⚠️ No caller found for DeclarationNode: ${node.id}`);
-        console.warn(`     Expected usedBy:`, usedBy);
-
         // Fallback: đặt vào file của chính declaration node
         const declFile = (node.data as any).file;
         if (!nodesByFile.has(declFile)) {
           nodesByFile.set(declFile, []);
         }
         nodesByFile.get(declFile)!.push(node);
-        console.log(
-          `  🔄 DeclarationNode "${node.id}" fallback to own file: ${declFile}`
-        );
       }
     }
   });
@@ -100,10 +89,6 @@ function groupNodesByFile(nodes: Node[], edges: Edge[]): FileGroup[] {
     const declarationCount = groupNodes.filter(
       (n) => n.type === "declarationNode"
     ).length;
-
-    console.log(
-      `📁 FileGroup "${fileName}": ${functionCount}F + ${declarationCount}D = ${groupNodes.length} nodes`
-    );
 
     fileGroups.push({
       fileName,
@@ -247,10 +232,6 @@ function findOptimalPosition(
 
   // If still occupied after attempts, try a completely different approach
   if (attempts >= maxAttempts) {
-    console.warn(
-      `Could not find optimal position for declaration node, using fallback position`
-    );
-
     // Find the rightmost function node and place declaration to its right
     let maxX = -Infinity;
     let baseY = preferredY;
@@ -315,11 +296,6 @@ function placeDeclarationNodesNearCallers(
         }
         declarationsByFunction.get(callerNode.id)!.push(declNode);
       }
-    } else {
-      // Fallback: place at default position
-      console.warn(
-        `   ⚠️ No caller edge found for DeclarationNode: ${declNode.id}`
-      );
     }
   });
 
@@ -392,10 +368,6 @@ function placeDeclarationNodesNearCallers(
   );
 
   if (unplacedDeclarations.length > 0) {
-    console.warn(
-      `   ⚠️ Placing ${unplacedDeclarations.length} declarations without callers at default positions`
-    );
-
     let fallbackX = 100;
     let fallbackY = 100;
 
@@ -455,8 +427,6 @@ function ensureContainerSpacing(containers: any[]): any[] {
         } else {
           containerB.position.y = moveDown;
         }
-
-        console.log(`   🔄 Adjusted container position to avoid overlap`);
       }
     }
   }
@@ -1029,9 +999,6 @@ export async function applyLayout(
       result = layoutWithD3Force(nodes, styledEdges, strategy);
       break;
     default:
-      console.warn(
-        `❓ [LayoutEngine] Unknown algorithm: ${strategy.algorithm}, using default`
-      );
       result = { nodes, edges: styledEdges };
   }
 

@@ -863,7 +863,10 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             line: (n.data as FunctionNodeData).line,
           }));
 
-        FlowPathTracker.generateFlowsFromGraph(codeNodes, layoutedEdges);
+        FlowPathTracker.generateExecutionFlowsFromGraph(
+          codeNodes,
+          layoutedEdges
+        );
 
         setIsLoading(false);
         setError(null);
@@ -952,13 +955,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
       (n: { type: string }) => n.type === "fileGroupContainer"
     );
 
-    // THÊM LOG DEBUG
-    console.log(`📊 Container Calculation:`, {
-      functionNodes: codeNodes.length,
-      declarationNodes: declarationNodes.length,
-      currentContainers: currentContainers.length,
-    });
-
     if (codeNodes.length === 0 && declarationNodes.length === 0) {
       return;
     }
@@ -968,9 +964,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     // LOG KẾT QUẢ
     containerNodes.forEach((container) => {
       const data = container.data as any;
-      console.log(
-        `🏷️ Container "${data.fileName}": ${data.functionNodeCount}F + ${data.declarationNodeCount}D`
-      );
     });
 
     // Create a signature for current state to prevent unnecessary updates
