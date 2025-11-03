@@ -58,11 +58,16 @@ interface FlowGraphProps {
 }
 
 import DeclarationNode from "./DeclarationNode";
+import CallOrderEdge from "./CallOrderEdge";
 
 const nodeTypes = {
   functionNode: FunctionNode as React.ComponentType<any>,
   declarationNode: DeclarationNode as React.ComponentType<any>,
   fileGroupContainer: FileGroupContainer as React.ComponentType<any>,
+};
+
+const edgeTypes = {
+  callOrderEdge: CallOrderEdge as React.ComponentType<any>,
 };
 
 // Custom debounce hook
@@ -649,6 +654,10 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
 
   const convertToFlowData = useCallback(
     (data: GraphData): { nodes: FlowNode[]; edges: FlowEdge[] } => {
+      Logger.info(
+        `[convertToFlowData] START - Processing ${data.nodes.length} nodes and ${data.edges.length} edges`
+      );
+
       const flowNodes: FlowNode[] = [];
       const edgeConnections: EdgeConnection[] = [];
 
@@ -711,6 +720,8 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         }
       });
 
+      Logger.info(`[convertToFlowData] Created ${flowNodes.length} flow nodes`);
+
       const flowEdges: FlowEdge[] = data.edges
         .filter((edge) => {
           const sourceExists = flowNodes.some((n) => n.id === edge.source);
@@ -729,6 +740,13 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           const targetNode = data.nodes.find((n) => n.id === edge.target);
 
           const hasReturnValue = edge.hasReturnValue ?? true;
+          const callOrder = (edge as any).callOrder;
+          const returnOrder = (edge as any).returnOrder;
+
+          // ✅ CRITICAL DEBUG LOG
+          Logger.info(
+            `[convertToFlowData] Edge #${index}: ${edge.source}->${edge.target} | type="${edge.type}" | callOrder=${callOrder} | returnOrder=${returnOrder} | hasReturnValue=${hasReturnValue}`
+          );
 
           const edgeStyle = hasReturnValue
             ? {
@@ -737,10 +755,10 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
                 strokeLinecap: "round" as const,
               }
             : {
-                stroke: "#888", // Màu nhạt hơn cho dashed
+                stroke: "#888",
                 strokeWidth: 2,
                 strokeLinecap: "round" as const,
-                strokeDasharray: "8 4", // Nét đứt rõ ràng hơn
+                strokeDasharray: "8 4",
               };
 
           if (sourceNode && targetNode) {
@@ -755,17 +773,33 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             });
           }
 
+          // ✅ CRITICAL FIX: Xác định edge type ĐÚNG
+          let edgeType: string;
+          if (edge.type === "uses") {
+            edgeType = "default";
+          } else if (callOrder !== undefined || returnOrder !== undefined) {
+            edgeType = "callOrderEdge";
+          } else {
+            edgeType = "default";
+          }
+
+          Logger.info(
+            `[convertToFlowData] ✅ Edge ${edge.source}->${edge.target} assigned type="${edgeType}"`
+          );
+
           return {
             id: `edge-${edge.source}-${edge.target}-${index}`,
             source: edge.source,
             target: edge.target,
-            type: edge.type || "default",
+            type: edgeType,
             animated: false,
             style: edgeStyle,
             data: {
               dashed: !hasReturnValue,
               solid: hasReturnValue,
               hasReturnValue: hasReturnValue,
+              callOrder: callOrder,
+              returnOrder: returnOrder,
             },
             pathOptions: {
               borderRadius: 20,
@@ -773,6 +807,15 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             },
           };
         });
+
+      Logger.info(
+        `[convertToFlowData] ✅ DONE - Created ${flowEdges.length} flow edges`
+      );
+      Logger.info(
+        `[convertToFlowData] Edge types: ${flowEdges
+          .map((e) => `${e.id}:${e.type}`)
+          .join(", ")}`
+      );
 
       EdgeTracker.updateEdges(edgeConnections);
 
@@ -1093,6 +1136,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           onEdgesChange={onEdgesChange}
           onNodeClick={onNodeClick}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           fitView
           minZoom={0.1}
           maxZoom={2}

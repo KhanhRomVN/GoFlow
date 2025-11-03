@@ -5,16 +5,19 @@ import { Logger } from "../utils/logger";
 import { EdgeDetector, EdgeDetectionContext } from "./EdgeDetector";
 import { DeclarationDetector } from "./DeclarationDetector";
 import { NodeFactory } from "./NodeFactory";
+import { CallOrderTracker } from "./CallOrderTracker";
 
 export class GoParser {
   private edgeDetector: EdgeDetector;
   private declarationDetector: DeclarationDetector;
   private nodeFactory: NodeFactory;
+  private callOrderTracker: CallOrderTracker;
 
   constructor() {
     this.edgeDetector = new EdgeDetector();
     this.declarationDetector = new DeclarationDetector();
     this.nodeFactory = new NodeFactory();
+    this.callOrderTracker = new CallOrderTracker();
   }
 
   async parseFile(document: vscode.TextDocument): Promise<GraphData> {
@@ -290,7 +293,56 @@ export class GoParser {
         }
       }
 
-      // Step 3: Tạo DeclarationNodes dựa trên usage
+      // Step 3: Analyze call order execution flow
+      Logger.info(
+        `[GoParser] 📊 Analyzing call order for root: ${functionInfo.name}`
+      );
+      Logger.info(
+        `[GoParser] 📊 Total edges before call order analysis: ${allEdges.length}`
+      );
+
+      const callOrderMap = await this.callOrderTracker.analyzeExecutionFlow(
+        functionInfo.symbol,
+        document,
+        await this.getDocumentSymbols(document),
+        allEdges
+      );
+
+      Logger.info(`[GoParser] 📊 CallOrderMap size: ${callOrderMap.size}`);
+
+      // Apply call orders to edges
+      let edgesWithCallOrder = 0;
+      allEdges.forEach((edge) => {
+        const edgeKey = `${edge.source}->${edge.target}`;
+        const orderInfo = callOrderMap.get(edgeKey);
+
+        if (orderInfo) {
+          // ✅ THAY ĐỔI: Lưu vào edge property (giữ nguyên như cũ)
+          if (orderInfo.callOrder !== undefined) {
+            edge.callOrder = orderInfo.callOrder;
+            edgesWithCallOrder++;
+            Logger.info(
+              `[GoParser] ✅ Assigned callOrder=${orderInfo.callOrder} to edge: ${edgeKey}`
+            );
+          }
+          if (orderInfo.returnOrder !== undefined) {
+            edge.returnOrder = orderInfo.returnOrder;
+            Logger.info(
+              `[GoParser] ✅ Assigned returnOrder=${orderInfo.returnOrder} to edge: ${edgeKey}`
+            );
+          }
+        } else {
+          Logger.warn(
+            `[GoParser] ⚠️ No call order info found for edge: ${edgeKey}`
+          );
+        }
+      });
+
+      Logger.info(
+        `[GoParser] ✅ Assigned call orders to ${edgesWithCallOrder}/${allEdges.length} edges`
+      );
+
+      // Step 4: Tạo DeclarationNodes dựa trên usage
       let declarationIndex = 0;
       declarationUsageMap.forEach((usedByFunctions, baseDeclarationId) => {
         const declarationInfo = declarationSymbolMap.get(baseDeclarationId);

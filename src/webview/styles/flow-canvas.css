@@ -165,3 +165,31 @@
 .react-flow__edge.dashed .react-flow__edge-path {
   stroke-dasharray: 8 4 !important;
 }
+
+/* ===================================
+   CALL ORDER EDGE LABELS
+   =================================== */
+
+.react-flow__edge[data-has-call-order="true"] .react-flow__edge-path {
+  stroke-width: 2.5px;
+}
+
+.react-flow__edge[data-has-call-order="true"]:hover .react-flow__edge-path {
+  stroke-width: 3.5px;
+}
+
+/* Call order label animation */
+@keyframes pulse-call-order {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.05);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+  }
+}
+
+.react-flow__edge:hover [data-call-order-label] {
+  animation: pulse-call-order 1s ease-in-out infinite;
+}

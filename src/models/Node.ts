@@ -29,6 +29,8 @@ export interface Edge {
   target: string;
   type: "calls" | "uses" | "implements";
   hasReturnValue?: boolean; // true = solid line, false = dashed line
+  callOrder?: number; // Thứ tự gọi hàm (call forward)
+  returnOrder?: number; // Thứ tự return (return backward)
 }
 
 export interface GraphData {
