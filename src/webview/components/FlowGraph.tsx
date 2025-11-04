@@ -895,6 +895,9 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
 
       EdgeTracker.updateEdges(edgeConnections);
 
+      // ✅ MỚI: Expose edges globally để MonacoCodeEditor có thể access
+      (window as any).__goflowEdges = flowEdges;
+
       return { nodes: flowNodes, edges: flowEdges };
     },
     [

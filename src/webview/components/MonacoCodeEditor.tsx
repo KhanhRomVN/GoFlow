@@ -20,7 +20,9 @@ interface MonacoCodeEditorProps {
   readOnly?: boolean;
   lineNumber?: number;
   onLineClick?: (lineNumber: number, lineContent: string) => void;
-  onEditorHeightChange?: (height: number) => void; // THÊM prop mới
+  onEditorHeightChange?: (height: number) => void;
+  nodeId?: string; // ✅ MỚI: Node ID để lấy edges từ EdgeTracker
+  allEdges?: any[]; // ✅ MỚI: Danh sách edges (có thể lấy từ EdgeTracker)
 }
 
 // Biến toàn cục để theo dõi trạng thái khởi tạo
@@ -111,6 +113,131 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
 
     monaco.editor.setTheme(themeName);
 
+    // ✅ MỚI: Apply decorations cho function call lines
+    const applyFunctionCallDecorations = () => {
+      const model = editor.getModel();
+      if (!model) return;
+
+      const decorations: any[] = [];
+      const functionCallRegex = /\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
+
+      // Duyệt qua từng dòng để tìm function calls
+      for (let i = 1; i <= model.getLineCount(); i++) {
+        const lineContent = model.getLineContent(i);
+        const matches = Array.from(
+          lineContent.matchAll(functionCallRegex)
+        ) as RegExpMatchArray[];
+
+        if (matches.length > 0) {
+          // Kiểm tra xem có phải là function call thực sự không
+          const trimmedLine = lineContent.trim();
+
+          // Bỏ qua comment lines
+          if (trimmedLine.startsWith("//")) continue;
+
+          // Bỏ qua function declarations
+          if (trimmedLine.startsWith("func ")) continue;
+
+          matches.forEach((match, idx) => {
+            const functionName = match[1];
+
+            // Skip Go keywords
+            const keywords = [
+              "if",
+              "for",
+              "switch",
+              "return",
+              "defer",
+              "go",
+              "select",
+              "case",
+              "range",
+            ];
+            if (keywords.includes(functionName)) return;
+
+            const charIndex = match.index ?? 0;
+
+            // Xác định màu sắc: solid (có return) vs dashed (void)
+            const hasReturnValue = detectReturnValueUsage(
+              lineContent,
+              charIndex,
+              functionName
+            );
+            const badgeColor = hasReturnValue ? "#10b981" : "#6b7280"; // Green vs Gray
+            const lineColor = hasReturnValue
+              ? "rgba(16, 185, 129, 0.1)"
+              : "rgba(107, 114, 128, 0.1)";
+
+            // Thêm line background decoration
+            decorations.push({
+              range: new monaco.Range(i, 1, i, 1),
+              options: {
+                isWholeLine: true,
+                className: "function-call-line",
+                glyphMarginClassName: "function-call-glyph",
+                glyphMarginHoverMessage: {
+                  value: `**Calls:** ${functionName}()`,
+                },
+                overviewRuler: {
+                  color: badgeColor,
+                  position: monaco.editor.OverviewRulerLane.Left,
+                },
+                minimap: {
+                  color: badgeColor,
+                  position: monaco.editor.MinimapPosition.Inline,
+                },
+                linesDecorationsClassName: "function-call-badge",
+                before: {
+                  content: `${idx + 1}`,
+                  inlineClassName: "function-call-badge-content",
+                  inlineClassNameAffectsLetterSpacing: true,
+                },
+              },
+            });
+          });
+        }
+      }
+
+      editor.deltaDecorations([], decorations);
+    };
+
+    // Helper function to detect return value usage
+    const detectReturnValueUsage = (
+      line: string,
+      callPosition: number,
+      functionName: string
+    ): boolean => {
+      const beforeCall = line.substring(0, callPosition).trim();
+      const lineUpToCall = line.substring(
+        0,
+        callPosition + functionName.length
+      );
+
+      // Assignment patterns
+      if (/:=/.test(lineUpToCall) || /[^=!<>]=(?!=)/.test(lineUpToCall)) {
+        return true;
+      }
+
+      // Return statement
+      if (/\breturn\s+$/.test(beforeCall)) return true;
+
+      // Comparison
+      if (/[!=<>]+\s*$/.test(beforeCall)) return true;
+
+      // Function argument
+      if (/[,(]\s*$/.test(beforeCall)) return true;
+
+      // Standalone call
+      const standalonePattern = /^(\s*)(\w+\.)*\w+\s*$/;
+      const checkStr = line
+        .substring(0, callPosition + functionName.length)
+        .trim();
+
+      if (standalonePattern.test(checkStr)) return false;
+
+      return beforeCall.length > 0 && !/^\s*$/.test(beforeCall);
+    };
+
     // ✅ THAY ĐỔI: Tính toán chiều cao dựa trên số dòng thực tế
     const lineHeight = 19; // Monaco default line height
     const maxLines = 25; // Giới hạn tối đa 25 dòng
@@ -149,6 +276,14 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
 
     // Update height when content changes
     editor.onDidContentSizeChange(updateEditorHeight);
+
+    // ✅ MỚI: Apply decorations sau khi editor ready
+    applyFunctionCallDecorations();
+
+    // ✅ MỚI: Re-apply decorations when content changes
+    editor.onDidChangeModelContent(() => {
+      applyFunctionCallDecorations();
+    });
 
     // Set line number offset if needed
     if (lineNumber > 1) {

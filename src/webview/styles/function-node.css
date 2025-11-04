@@ -518,3 +518,50 @@
   text-overflow: ellipsis;
   max-width: 120px;
 }
+
+/* ===================================
+   MONACO EDITOR FUNCTION CALL BADGES
+   =================================== */
+
+/* Line background for function calls */
+.function-call-line {
+  background: rgba(16, 185, 129, 0.05) !important;
+}
+
+/* Glyph margin badge */
+.function-call-glyph {
+  background: rgba(16, 185, 129, 0.15) !important;
+  width: 100% !important;
+}
+
+/* Badge number decoration */
+.function-call-badge {
+  position: relative !important;
+  margin-left: 4px !important;
+}
+
+.function-call-badge-content {
+  display: inline-block !important;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  color: white !important;
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  padding: 2px 6px !important;
+  border-radius: 8px !important;
+  margin-right: 6px !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+  font-family: 'Courier New', monospace !important;
+  vertical-align: middle !important;
+}
+
+/* Badge for dashed edges (void functions) */
+.function-call-badge-dashed .function-call-badge-content {
+  background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%) !important;
+  opacity: 0.8 !important;
+}
+
+/* Hover effect */
+.function-call-badge:hover .function-call-badge-content {
+  transform: scale(1.1) !important;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3) !important;
+}

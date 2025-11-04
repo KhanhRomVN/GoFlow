@@ -445,6 +445,8 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
               lineNumber={nodeData.line}
               onLineClick={handleLineClick}
               onEditorHeightChange={handleEditorHeightChange}
+              nodeId={nodeData.id}
+              allEdges={(window as any).__goflowEdges || []}
             />
           </div>
         </div>
