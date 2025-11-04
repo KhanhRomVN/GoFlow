@@ -655,10 +655,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
 
   const convertToFlowData = useCallback(
     (data: GraphData): { nodes: FlowNode[]; edges: FlowEdge[] } => {
-      Logger.info(
-        `[convertToFlowData] START - Processing ${data.nodes.length} nodes and ${data.edges.length} edges`
-      );
-
       const flowNodes: FlowNode[] = [];
       const edgeConnections: EdgeConnection[] = [];
 
@@ -689,8 +685,8 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               height: "auto",
               minHeight: 206,
             },
-            width: 650, // ✅ CRITICAL: React Flow dimension requirement
-            height: 320, // ✅ CRITICAL: Đặt height mặc định thay vì "auto" cho layout engine
+            width: 650, // CRITICAL: React Flow dimension requirement
+            height: 320, // CRITICAL: Đặt height mặc định thay vì "auto" cho layout engine
             zIndex: 10,
           } as FlowNode);
         } else if (
@@ -703,7 +699,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           const validWidth = 350;
           const validHeight = 200;
 
-          // ✅ THÊM: Validate initial position
+          // THÊM: Validate initial position
           const safePosition = {
             x: 0, // Safe default
             y: 0, // Safe default
@@ -712,7 +708,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           flowNodes.push({
             id: node.id,
             type: "declarationNode" as const,
-            position: safePosition, // ✅ Sử dụng safe position
+            position: safePosition, // Sử dụng safe position
             data: {
               id: node.id,
               label: node.label,
@@ -734,8 +730,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         }
       });
 
-      Logger.info(`[convertToFlowData] Created ${flowNodes.length} flow nodes`);
-
       const flowEdges: FlowEdge[] = data.edges
         .filter((edge) => {
           const sourceExists = flowNodes.some((n) => n.id === edge.source);
@@ -756,11 +750,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           const hasReturnValue = edge.hasReturnValue ?? true;
           const callOrder = (edge as any).callOrder;
           const returnOrder = (edge as any).returnOrder;
-
-          // ✅ CRITICAL DEBUG LOG
-          Logger.info(
-            `[convertToFlowData] Edge #${index}: ${edge.source}->${edge.target} | type="${edge.type}" | callOrder=${callOrder} | returnOrder=${returnOrder} | hasReturnValue=${hasReturnValue}`
-          );
 
           const edgeStyle = hasReturnValue
             ? {
@@ -787,7 +776,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             });
           }
 
-          // ✅ CRITICAL FIX: Xác định edge type ĐÚNG
+          // CRITICAL FIX: Xác định edge type ĐÚNG
           let edgeType: string;
           if (edge.type === "uses") {
             edgeType = "default";
@@ -797,11 +786,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             edgeType = "default";
           }
 
-          Logger.info(
-            `[convertToFlowData] ✅ Edge ${edge.source}->${edge.target} assigned type="${edgeType}"`
-          );
-
-          // ✅ MỚI: SMART EDGE HANDLE OPTIMIZATION
+          // MỚI: SMART EDGE HANDLE OPTIMIZATION
           let sourceHandle = "right"; // Fallback mặc định
           let targetHandle = "left"; // Fallback mặc định
 
@@ -832,10 +817,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
 
               sourceHandle = optimizedHandles.sourceHandle;
               targetHandle = optimizedHandles.targetHandle;
-
-              Logger.info(
-                `[convertToFlowData] 🎯 Optimized edge handles: ${edge.source}(${sourceHandle}) -> ${edge.target}(${targetHandle}) | priority: ${optimizedHandles.priority}`
-              );
             } else {
               Logger.warn(
                 `[convertToFlowData] ⚠️ Could not find flow nodes for edge optimization: ${edge.source} -> ${edge.target}`
@@ -863,8 +844,8 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             id: `edge-${edge.source}-${edge.target}-${index}`,
             source: edge.source,
             target: edge.target,
-            sourceHandle, // ✅ SMART HANDLE
-            targetHandle, // ✅ SMART HANDLE
+            sourceHandle, // SMART HANDLE
+            targetHandle, // SMART HANDLE
             type: edgeType,
             animated: false,
             style: edgeStyle,
@@ -874,7 +855,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               hasReturnValue: hasReturnValue,
               callOrder: callOrder,
               returnOrder: returnOrder,
-              optimized: true, // ✅ Đánh dấu edge đã được tối ưu
+              optimized: true, // Đánh dấu edge đã được tối ưu
               handlePriority: (edge as any).handlePriority || 0,
             },
             pathOptions: {
@@ -884,18 +865,9 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           };
         });
 
-      Logger.info(
-        `[convertToFlowData] ✅ DONE - Created ${flowEdges.length} flow edges`
-      );
-      Logger.info(
-        `[convertToFlowData] Edge types: ${flowEdges
-          .map((e) => `${e.id}:${e.type}`)
-          .join(", ")}`
-      );
-
       EdgeTracker.updateEdges(edgeConnections);
 
-      // ✅ MỚI: Expose edges globally để MonacoCodeEditor có thể access
+      // MỚI: Expose edges globally để MonacoCodeEditor có thể access
       (window as any).__goflowEdges = flowEdges;
 
       return { nodes: flowNodes, edges: flowEdges };

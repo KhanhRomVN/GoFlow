@@ -294,21 +294,12 @@ export class GoParser {
       }
 
       // Step 3: Analyze call order execution flow
-      Logger.info(
-        `[GoParser] 📊 Analyzing call order for root: ${functionInfo.name}`
-      );
-      Logger.info(
-        `[GoParser] 📊 Total edges before call order analysis: ${allEdges.length}`
-      );
-
       const callOrderMap = await this.callOrderTracker.analyzeExecutionFlow(
         functionInfo.symbol,
         document,
         await this.getDocumentSymbols(document),
         allEdges
       );
-
-      Logger.info(`[GoParser] 📊 CallOrderMap size: ${callOrderMap.size}`);
 
       // Apply call orders to edges
       let edgesWithCallOrder = 0;
@@ -317,19 +308,13 @@ export class GoParser {
         const orderInfo = callOrderMap.get(edgeKey);
 
         if (orderInfo) {
-          // ✅ THAY ĐỔI: Lưu vào edge property (giữ nguyên như cũ)
+          // THAY ĐỔI: Lưu vào edge property (giữ nguyên như cũ)
           if (orderInfo.callOrder !== undefined) {
             edge.callOrder = orderInfo.callOrder;
             edgesWithCallOrder++;
-            Logger.info(
-              `[GoParser] ✅ Assigned callOrder=${orderInfo.callOrder} to edge: ${edgeKey}`
-            );
           }
           if (orderInfo.returnOrder !== undefined) {
             edge.returnOrder = orderInfo.returnOrder;
-            Logger.info(
-              `[GoParser] ✅ Assigned returnOrder=${orderInfo.returnOrder} to edge: ${edgeKey}`
-            );
           }
         } else {
           Logger.warn(
@@ -337,10 +322,6 @@ export class GoParser {
           );
         }
       });
-
-      Logger.info(
-        `[GoParser] ✅ Assigned call orders to ${edgesWithCallOrder}/${allEdges.length} edges`
-      );
 
       // Step 4: Tạo DeclarationNodes dựa trên usage
       let declarationIndex = 0;

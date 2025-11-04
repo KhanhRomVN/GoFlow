@@ -144,7 +144,7 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
       const newTotalHeight = 56 + height + 8; // header (56) + editor + padding (8)
       setTotalNodeHeight(newTotalHeight);
 
-      // ✅ CRITICAL: Force update React Flow node dimensions
+      // CRITICAL: Force update React Flow node dimensions
       if (nodeRef.current) {
         nodeRef.current.style.height = `${newTotalHeight}px`;
 
@@ -158,7 +158,7 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
         nodeData.onEditorHeightChange(newTotalHeight);
       }
 
-      // ✅ CRITICAL: Update React Flow node height
+      // CRITICAL: Update React Flow node height
       // This triggers React Flow to recalculate node dimensions
       if (nodeRef.current) {
         nodeRef.current.style.height = `${newTotalHeight}px`;

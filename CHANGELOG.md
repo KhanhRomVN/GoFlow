@@ -1,97 +1,105 @@
-# Change Log
+# GoFlow Change Log
 
-All notable changes to the "copy-path-with-code" extension will be documented in this file.
+All notable changes to the "GoFlow - Visual Go Code Navigator" extension will be documented in this file.
 
-## [1.0.0] - 2024-01-01
+## [1.0.0] - 2025-11-04
 
-### Added
+### 🚀 Initial Public Release
 
-- Complete extension rewrite with TypeScript
-- Advanced folder management system with tree view
-- Clipboard detection and file parsing
-- Temporary clipboard storage functionality
-- Workspace and global view modes
-- Advanced search and filtering capabilities
-- Comprehensive file operations context menu
-- Status bar integration with file counters
-- Extension logging system
+GoFlow 1.0.0 represents a complete, production-ready visualization tool for Go codebases with advanced dependency analysis and interactive canvas features.
 
-## [0.0.9] - 2023-12-01
+#### ✨ New Features
 
-### Added
+**Core Visualization**
+- Interactive React Flow canvas for code visualization
+- Function and method node types with color coding
+- Smart edge routing with call order tracking
+- Return value detection (solid vs dashed edges)
+- Mini-map for large graph navigation
 
-- Temporary clipboard storage feature
-- Status bar indicators for temp storage
-- Save/restore functionality for clipboard contents
+**Code Analysis**
+- Advanced Go parser with cross-file dependency resolution
+- Function call detection with return value usage analysis
+- Method receiver type tracking
+- Struct, interface, and type dependency visualization
+- Support for nested functions and complex call chains
 
-## [0.0.8] - 2023-11-15
+**User Experience**
+- Monaco editor integration for in-place code editing
+- File grouping containers with visual organization
+- Node visibility controls and filtering
+- Flow collections for saved analyses
+- Export diagrams as PNG for documentation
 
-### Added
+**Framework Integration**
+- Multi-language framework detection (Go, Java, Python, JavaScript, etc.)
+- Framework-aware layout strategies (Dagre, ELK, D3-force)
+- Auto-detection of web frameworks (Gin, Echo, gRPC)
+- Pattern-based layout optimization
 
-- Clipboard file detection system
-- Clipboard tree view in explorer
-- File preview functionality for detected files
-- Enhanced error handling
+#### 🎯 Interactive Features
 
-## [0.0.7] - 2023-11-01
+- Click-to-navigate function definitions
+- Real-time code editing in visual nodes
+- Execution path highlighting
+- Call order visualization with numbered edges
+- Smart zoom and fit-to-view controls
+- Drag-and-drop node repositioning
 
-### Added
+#### ⚙️ Configuration & Commands
 
-- Comprehensive folder management system
-- Interactive tree view for file selection
-- Advanced search functionality
-- Workspace-aware folder organization
+**Keyboard Shortcuts**
+- `Ctrl+Shift+G` / `Cmd+Shift+G`: Show GoFlow Canvas
+- `Ctrl+Shift+R` / `Cmd+Shift+R`: Refresh Canvas
+- `Ctrl+Shift+E` / `Cmd+Shift+E`: Export Diagram
+- `F11`: Toggle Fullscreen Mode
 
-## [0.0.6] - 2023-10-15
+**Settings**
+- Layout algorithm selection (Dagre, ELK, D3-force)
+- Auto-refresh on file save
+- Maximum nodes limit for performance
+- Jump-to-file enable/disable
+- Type and interface visibility toggles
 
-### Added
+#### 🔧 Technical Architecture
 
-- File operations context menu
-- Copy/cut/paste functionality for files
-- New file/folder creation commands
-- Reveal in explorer feature
+**Frontend**
+- React Flow for graph visualization
+- Monaco Editor for code editing
+- Tailwind CSS for styling
+- Custom node types with resize handles
 
-## [0.0.5] - 2023-10-01
+**Backend**
+- TypeScript with VSCode Extension API
+- Go symbol provider integration
+- Abstract syntax tree analysis
+- Cross-file definition resolution
 
-### Added
+**Performance**
+- Efficient dependency graph generation
+- Incremental layout calculations
+- Memory-optimized node rendering
+- Lazy loading for large codebases
 
-- Error-enhanced copying with problem diagnostics
-- Multi-file clipboard management
-- Clipboard integrity monitoring
-- Enhanced status bar information
+#### 📊 Supported Go Features
 
-## [0.0.4] - 2023-09-15
+- Function and method calls
+- Interface implementations
+- Struct type dependencies
+- Package-level function resolution
+- Cross-package dependencies (within project)
+- Deferred function calls
+- Goroutine launches
+- Method receivers (value and pointer)
 
-### Added
+#### 🌟 Enterprise Ready
 
-- Folder operations (open all, copy contents)
-- File management mode for add/remove operations
-- Search and filter functionality
-- Selection management commands
+- Handles large codebases with 100+ nodes
+- Memory-efficient graph processing
+- Professional visual design
+- Comprehensive error handling
+- Extensive logging and debugging support
 
-## [0.0.3] - 2023-09-01
+---
 
-### Added
-
-- Basic folder management commands
-- Create, rename, delete folder functionality
-- Add/remove files from folders
-- Persistent storage for folders
-
-## [0.0.2] - 2023-08-15
-
-### Added
-
-- Core copying functionality (path + content)
-- Error formatting for copied content
-- Basic clipboard management
-- Initial extension structure
-
-## [0.0.1] - 2023-08-01
-
-### Added
-
-- Initial release with basic functionality
-- Copy file path with content command
-- Simple error message formatting
-- Basic extension scaffolding
+*GoFlow 1.0.0 represents over 6 months of intensive development and testing, providing a robust, feature-complete visualization solution for Go developers worldwide.*

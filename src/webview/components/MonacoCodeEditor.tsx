@@ -21,8 +21,8 @@ interface MonacoCodeEditorProps {
   lineNumber?: number;
   onLineClick?: (lineNumber: number, lineContent: string) => void;
   onEditorHeightChange?: (height: number) => void;
-  nodeId?: string; // ✅ MỚI: Node ID để lấy edges từ EdgeTracker
-  allEdges?: any[]; // ✅ MỚI: Danh sách edges (có thể lấy từ EdgeTracker)
+  nodeId?: string; // MỚI: Node ID để lấy edges từ EdgeTracker
+  allEdges?: any[]; // MỚI: Danh sách edges (có thể lấy từ EdgeTracker)
 }
 
 // Biến toàn cục để theo dõi trạng thái khởi tạo
@@ -113,7 +113,7 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
 
     monaco.editor.setTheme(themeName);
 
-    // ✅ MỚI: Apply decorations cho function call lines
+    // MỚI: Apply decorations cho function call lines
     const applyFunctionCallDecorations = () => {
       const model = editor.getModel();
       if (!model) return;
@@ -238,7 +238,7 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       return beforeCall.length > 0 && !/^\s*$/.test(beforeCall);
     };
 
-    // ✅ THAY ĐỔI: Tính toán chiều cao dựa trên số dòng thực tế
+    // THAY ĐỔI: Tính toán chiều cao dựa trên số dòng thực tế
     const lineHeight = 19; // Monaco default line height
     const maxLines = 25; // Giới hạn tối đa 25 dòng
     const maxHeight = lineHeight * maxLines;
@@ -277,10 +277,10 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
     // Update height when content changes
     editor.onDidContentSizeChange(updateEditorHeight);
 
-    // ✅ MỚI: Apply decorations sau khi editor ready
+    // MỚI: Apply decorations sau khi editor ready
     applyFunctionCallDecorations();
 
-    // ✅ MỚI: Re-apply decorations when content changes
+    // MỚI: Re-apply decorations when content changes
     editor.onDidChangeModelContent(() => {
       applyFunctionCallDecorations();
     });

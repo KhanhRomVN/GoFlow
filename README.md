@@ -1,126 +1,129 @@
-# Copy Path with Code 📋✨
+# GoFlow - Visual Go Code Navigator 🚀
 
-A powerful Visual Studio Code extension that revolutionizes how you copy, organize, and manage code snippets with file context. Perfect for developers who need to share code with proper file references and maintain organized collections of related files.
+## 📑 Table of Contents
 
-![VS Code Extension](https://img.shields.io/badge/VS%20Code-Extension-brightgreen)
-![Version](https://img.shields.io/badge/version-1.0.1-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
-![Downloads](https://img.shields.io/badge/downloads-10K+-orange)
+- [🌟 Why Choose GoFlow?](#-why-choose-goflow)
+- [🚀 Quick Start Guide](#-quick-start-guide)
+- [🎨 Core Features](#-core-features)
+- [⌨️ Comprehensive Keyboard Shortcuts](#️-comprehensive-keyboard-shortcuts)
+- [🏗️ Architecture & Technology](#️-architecture--technology)
+- [⚙️ Configuration Settings](#️-configuration-settings)
+- [📖 Detailed Usage Guide](#-detailed-usage-guide)
+- [🔧 Troubleshooting Common Issues](#-troubleshooting-common-issues)
+- [🚀 Advanced Features](#-advanced-features-1)
+- [📊 Performance Characteristics](#-performance-characteristics)
+- [🤝 Contributing & Support](#-contributing--support)
+- [📄 License & Attribution](#-license--attribution)
 
-## 🌟 Why Choose Copy Path with Code?
+---
 
-Tired of copying code without context? This extension solves the common problem of sharing code snippets without losing the crucial file path information. Whether you're collaborating with team members, creating documentation, or organizing your code references, Copy Path with Code enhances your workflow with intelligent clipboard management and file organization.
+## 🌟 Why Choose GoFlow?
+
+Tired of navigating complex Go codebases with endless files and dependencies? GoFlow transforms your code into an interactive visual graph, making it easy to understand function relationships, call hierarchies, and architectural patterns.
 
 ### 🎯 Key Benefits
 
-- **📋 Context-Aware Copying** - Copy code with full file path and formatting
-- **📁 Visual File Organization** - Create custom folders to group related files
-- **🔄 Smart Clipboard Management** - Track and manage multiple copied files
-- **🔍 Advanced Search** - Quickly find files across your organized collections
-- **⚡ Performance Optimized** - Lightweight and fast, even with large codebases
+- **🎨 Interactive Visualizations** - See your code as an interactive graph with function nodes and dependency edges
+- **🔍 Smart Dependency Analysis** - Automatically detect function calls, method invocations, and type dependencies
+- **📊 Multi-File Support** - Analyze dependencies across your entire project, not just single files
+- **⚡ Real-time Code Editing** - Edit code directly in the visual nodes with Monaco editor integration
+- **🎯 Intelligent Layouts** - Auto-detect framework patterns and apply optimal graph layouts
+- **🔗 Cross-File Navigation** - Jump to function definitions with a single click
 
 ## 🚀 Quick Start Guide
 
 ### Installation
 
 1. Open **VS Code Extensions** (`Ctrl+Shift+X` / `Cmd+Shift+X`)
-2. Search for **"Copy Path with Code"**
+2. Search for **"GoFlow - Visual Go Code Navigator"**
 3. Click **Install** and reload VS Code when prompted
 
-### Your First Copy
+### Your First Flow
 
-1. **Open any file** in your editor
-2. **Select text** (optional) or keep cursor position for full file content
-3. **Press `Ctrl+Alt+C`** (Win/Linux) or `Cmd+Alt+C` (Mac)
-4. **Paste anywhere** - get beautifully formatted output with path and code!
-
-**Example Output:**
-
-```
-src/utils/logger.ts:
-```
-
-```typescript
-export class Logger {
-  static info(message: string) {
-    console.log(`INFO: ${message}`);
-  }
-}
-```
+1. **Open a Go file** in your editor
+2. **Press `Ctrl+Shift+G`** (Win/Linux) or `Cmd+Shift+G` (Mac)
+3. **Select a function** from the quick pick menu
+4. **Explore the canvas** - interact with nodes, follow edges, and understand your code structure!
 
 ## 🎨 Core Features
 
-### 📋 Intelligent Copy Operations
+### 📊 Interactive Code Canvas
 
-| Feature                     | Description                                              | Shortcut        |
-| --------------------------- | -------------------------------------------------------- | --------------- |
-| **Basic Copy**              | Copy file path with content in markdown format           | `Ctrl+Alt+C`    |
-| **Error Context Copy**      | Include error messages and diagnostic information        | `Ctrl+Alt+A`    |
-| **Selection Copy**          | Copy specific code sections with line numbers            | (Auto-detected) |
-| **Multi-file Accumulation** | Collect multiple files in clipboard for batch operations | (Automatic)     |
+| Feature | Description | Shortcut |
+|---------|-------------|----------|
+| **Function Analysis** | Visualize function calls and dependencies | `Ctrl+Shift+G` |
+| **Method Tracking** | Track method calls and receiver types | Automatic |
+| **Type Dependencies** | Show struct, interface, and type usage | Automatic |
+| **Cross-File Navigation** | Jump between files while maintaining context | Click nodes |
 
-### 📁 Advanced Folder Management
+### 🎯 Smart Graph Features
 
-```typescript
-// Create organized collections of related files
-const folderFeatures = {
-  visualOrganization: "Tree-view interface with expandable folders",
-  batchOperations: "Add/remove multiple files with selection interface",
-  workspaceIsolation: "Separate folders per workspace or global access",
-  quickAccess: "Right-click context menus for all operations",
-};
+```go
+// GoFlow automatically detects and visualizes:
+func main() {
+    service := NewService()          // → Constructor calls
+    result := service.Process(data)  // → Method calls with return values
+    utils.Validate(result)           // → Package function calls
+    defer cleanup()                  // → Deferred calls
+}
 ```
 
-### 🔄 Clipboard Ecosystem
+### 📁 Advanced Project Management
 
-- **Temporary Storage**: Workspace-specific clipboard preservation
-- **Content Detection**: Automatic parsing of files from clipboard content
-- **Integrity Protection**: Monitoring against external clipboard changes
-- **Visual Queue**: Dedicated panel for detected clipboard files
+- **Flow Collections**: Save and organize frequently analyzed functions
+- **File Grouping**: Automatically group nodes by source file with visual containers
+- **Node Visibility**: Show/hide specific nodes to focus on relevant code paths
+- **Export Capabilities**: Export diagrams as PNG for documentation
 
-### 🔍 Smart Search & Navigation
+### 🔄 Real-time Code Integration
 
-- **Real-time filtering** of files and folders
-- **Case-sensitive options** in settings
-- **Quick file actions** through comprehensive context menus
-- **Cross-workspace file handling** with visual indicators
+- **Live Editing**: Edit code directly in canvas nodes with full syntax highlighting
+- **Auto-refresh**: Canvas updates automatically when files change
+- **Error Highlighting**: Visual indicators for problematic code paths
+- **Code Navigation**: Click on function calls to trace execution paths
 
 ## ⌨️ Comprehensive Keyboard Shortcuts
 
 ### Core Operations
 
-| Action                  | Windows/Linux | macOS       | Context        |
-| ----------------------- | ------------- | ----------- | -------------- |
-| Copy Path + Content     | `Ctrl+Alt+C`  | `Cmd+Alt+C` | Editor focused |
-| Copy with Errors        | `Ctrl+Alt+A`  | `Cmd+Alt+A` | Editor focused |
-| Transfer Temp to System | `Ctrl+Alt+Q`  | `Cmd+Alt+Q` | Any            |
-| Clear Temp Storage      | `Ctrl+Alt+Z`  | `Cmd+Alt+Z` | Any            |
+| Action | Windows/Linux | macOS | Context |
+|--------|---------------|-------|---------|
+| Show GoFlow Canvas | `Ctrl+Shift+G` | `Cmd+Shift+G` | Go files |
+| Refresh Canvas | `Ctrl+Shift+R` | `Cmd+Shift+R` | Canvas visible |
+| Export Diagram | `Ctrl+Shift+E` | `Cmd+Shift+E` | Canvas visible |
+| Toggle Fullscreen | `F11` | `F11` | Canvas visible |
 
-### Folder Management
+### Canvas Navigation
 
-| Action             | Shortcut           | Context      |
-| ------------------ | ------------------ | ------------ |
-| Add to Folder      | `Ctrl+Alt+Shift+A` | File focused |
-| Remove from Folder | `Ctrl+Alt+D`       | File focused |
-| Search Files       | `Ctrl+Alt+F`       | Folder view  |
+| Action | Method | Description |
+|--------|---------|-------------|
+| Zoom | Mouse Wheel | Zoom in/out |
+| Pan | Click + Drag | Move around canvas |
+| Fit View | Auto-fit button | Center all nodes |
+| Node Selection | Click | Select and focus nodes |
 
 ## 🏗️ Architecture & Technology
 
-Built with modern TypeScript and VS Code extension APIs, featuring a clean architecture pattern for maintainability and extensibility.
+Built with modern TypeScript, React Flow, and Monaco Editor, featuring a sophisticated parser for Go code analysis.
 
 ```mermaid
 graph TB
-    UI[VS Code UI Layer] --> Providers[Tree Data Providers]
-    Providers --> Services[Domain Services]
-    Services --> Entities[Business Entities]
-    Entities --> Storage[Persistence Layer]
-
-    subgraph "Clean Architecture"
-        Direction[Domain-Driven Design]
-        Separation[Separation of Concerns]
-        Testability[Testable Components]
-    end
+    A[Go Source Code] --> B[Go Parser]
+    B --> C[Dependency Graph]
+    C --> D[React Flow Canvas]
+    D --> E[Interactive Visualization]
+    
+    F[VSCode Extension] --> G[Webview Panel]
+    G --> D
+    H[Monaco Editor] --> I[Live Code Editing]
 ```
+
+### Technical Stack
+
+- **Frontend**: React Flow, Monaco Editor, Tailwind CSS
+- **Backend**: TypeScript, VSCode Extension API
+- **Parsing**: Go Symbol Provider, Abstract Syntax Tree analysis
+- **Layout**: Dagre, ELK, D3-force algorithms
 
 ## ⚙️ Configuration Settings
 
@@ -128,113 +131,140 @@ Access via VS Code Settings (`Ctrl+,` / `Cmd+,`):
 
 ```json
 {
-  "copyPathWithCode.enableClipboardDetection": true,
-  "copyPathWithCode.enableTempStorage": true,
-  "copyPathWithCode.tempStorageCleanupDays": 7,
-  "copyPathWithCode.showFileCount": true,
-  "copyPathWithCode.searchCaseSensitive": false,
-  "copyPathWithCode.searchIncludeExtensions": true
+  "goflow.layout": "dagre",
+  "goflow.showTypes": true,
+  "goflow.showInterfaces": true,
+  "goflow.autoRefresh": true,
+  "goflow.maxNodes": 100,
+  "goflow.enableJumpToFile": true
 }
 ```
 
+### Layout Algorithms
+
+- **Dagre**: Hierarchical top-down layouts (default)
+- **ELK Layered**: Handles complex dependencies with circular references
+- **D3 Force**: Force-directed layouts for organic node arrangement
+- **ELK Force**: Hybrid approach for reactive patterns
+
 ## 📖 Detailed Usage Guide
 
-### Creating and Managing Folders
+### Analyzing Function Dependencies
 
-1. **Open Code Folders View**: Click the folder icon in the activity bar
-2. **Create New Folder**: Click the + button in the view title bar
-3. **Add Files**: Right-click folder → "Add Files to Folder"
-4. **Organize**: Use drag-to-select or shift-click for multiple files
+1. **Open a Go file** containing functions or methods
+2. **Launch GoFlow** using the command palette or keyboard shortcut
+3. **Select target function** from the quick pick list
+4. **Explore the graph**:
+   - Solid edges → function calls with return values
+   - Dashed edges → void function calls
+   - Numbered edges → execution order
+   - Color-coded nodes → functions (green) vs methods (blue)
 
-### Advanced Clipboard Techniques
+### Working with the Canvas
 
-```typescript
-// Example: Multi-file workflow for documentation
-const workflow = {
-  step1: "Copy several related files using Ctrl+Alt+C",
-  step2: "Save to temporary storage with Ctrl+Alt+Q",
-  step3: "Switch to different workspace or project",
-  step4: "Restore clipboard contents when needed",
-  step5: "Paste all files as formatted markdown",
-};
+```go
+// Example: Complex function call hierarchy
+func HandleRequest(req *Request) Response {
+    validator := NewValidator()
+    if err := validator.Validate(req); err != nil {  // → Method call
+        return ErrorResponse(err)                    // → Function call
+    }
+    
+    processor := GetProcessor(req.Type)              // → Factory function
+    result := processor.Process(req.Data)           // → Interface method
+    return SuccessResponse(result)                   // → Function call
+}
 ```
 
-### Search and Discovery
+### Advanced Features
 
-- Use `Ctrl+Alt+F` in folder view to search across all files
-- Filter by file name, extension, or content type
-- Search results show match counts and quick navigation
+#### Call Order Tracking
+GoFlow analyzes execution order and displays call sequence numbers on edges, helping you understand the flow of execution through your code.
+
+#### Return Value Detection
+The extension intelligently detects whether function return values are used, displaying solid lines for value-returning calls and dashed lines for void calls.
+
+#### Multi-Language Framework Detection
+While optimized for Go, GoFlow can detect patterns from other languages and apply appropriate layout strategies.
 
 ## 🔧 Troubleshooting Common Issues
 
 ### Performance Optimization
 
-For large codebases (1000+ files):
+For large codebases (50+ nodes):
 
-- Enable "searchIncludeExtensions" to filter by file type
-- Use workspace-specific folders instead of global view
-- Clear temporary storage periodically
+- Use node visibility controls to focus on relevant paths
+- Enable "autoRefresh" only when needed
+- Adjust "maxNodes" setting based on your system capabilities
+- Use file grouping to organize related nodes
 
-### Clipboard Detection Issues
+### Parsing Issues
 
-If automatic detection isn't working:
+If dependencies aren't being detected:
 
-1. Check `copyPathWithCode.enableClipboardDetection` setting
-2. Verify clipboard content format matches expected patterns
-3. Check extension logs via "Show Extension Logs" command
+1. Ensure your Go project is properly built and indexed
+2. Check that function definitions are resolvable (no build errors)
+3. Verify the function is exported if analyzing cross-package calls
+4. Check extension logs via "GoFlow" output channel
 
-### File Organization Tips
+### Visualization Tips
 
-- Use descriptive folder names for better searchability
-- Leverage the multi-select interface for batch operations
-- Utilize different workspaces for separate project contexts
+- Use the mini-map for quick navigation in large graphs
+- Leverage auto-layout for optimal node positioning
+- Create flow collections for frequently analyzed functions
+- Export important diagrams for documentation purposes
 
 ## 🚀 Advanced Features
 
-### Cross-Workspace File Handling
+### Framework-Aware Layouts
 
-The extension intelligently handles files across different VS Code workspaces, providing visual indicators and maintaining relative paths where possible.
+GoFlow automatically detects code patterns and applies optimal layouts:
 
-### Customizable Themes
+- **Go Gin/Echo**: Top-down hierarchical (Handler → Service → Repository)
+- **gRPC Services**: Left-right flow for service chains
+- **Concurrent Patterns**: Force-directed layouts for goroutine interactions
 
-The extension respects VS Code theme colors and provides additional color customization points for:
+### Smart Edge Routing
 
-- Different workspace indicators
-- Search highlights
-- Status bar elements
-- Folder hierarchy visual cues
+```go
+// GoFlow optimizes edge paths for readability
+func ComplexFlow() {
+    // These calls get smart edge routing
+    result := transformData(           // → Curved edges around nodes
+        fetchFromDB(query),           // → Hierarchical ordering
+        config.ProcessingTimeout,     // → Minimal edge crossing
+    )
+}
+```
 
-### Extension API Integration
+### Real-time Collaboration Features
 
-While primarily a UI extension, it integrates deeply with VS Code's:
-
-- File system providers
-- Clipboard APIs
-- Workspace management
-- Editor selection context
+- **Live Code Updates**: Edit code in nodes and see changes reflected in real-time
+- **Path Highlighting**: Click on code lines to highlight execution paths
+- **Focus Mode**: Isolate specific call chains for detailed analysis
 
 ## 📊 Performance Characteristics
 
-| Operation           | Typical Speed | Large Project Impact  |
-| ------------------- | ------------- | --------------------- |
-| File Copy           | Instant       | Minimal               |
-| Folder Creation     | <100ms        | Low                   |
-| Search Filtering    | <50ms         | Medium (with caching) |
-| Clipboard Detection | <200ms        | Low                   |
+| Operation | Typical Speed | Large Project Impact |
+|-----------|---------------|---------------------|
+| File Analysis | 1-3 seconds | Moderate |
+| Graph Generation | 2-5 seconds | Moderate-High |
+| Canvas Rendering | Instant | Low |
+| Layout Calculation | 1-4 seconds | Moderate |
 
 ## 🤝 Contributing & Support
 
 ### Community Support
 
-- 📚 [Documentation Wiki](https://github.com/khanhromvn/copy-path-with-code/wiki)
-- 🐛 [Issue Tracker](https://github.com/khanhromvn/copy-path-with-code/issues)
-- 💡 [Feature Requests](https://github.com/khanhromvn/copy-path-with-code/discussions)
+- 📚 [Documentation Wiki](https://github.com/khanhromvn/goflow/wiki)
+- 🐛 [Issue Tracker](https://github.com/khanhromvn/goflow/issues)
+- 💡 [Feature Requests](https://github.com/khanhromvn/goflow/discussions)
 
 ### Development Setup
 
 ```bash
-git clone https://github.com/khanhromvn/copy-path-with-code.git
-cd copy-path-with-code
+git clone https://github.com/khanhromvn/goflow.git
+cd goflow
 npm install
 npm run watch
 ```
@@ -246,25 +276,3 @@ Press `F5` to launch extension development host.
 **MIT License** - See full license text in repository.
 
 Built with ❤️ by [Khanh Nguyen](https://github.com/khanhromvn) and contributors.
-
-## 🔄 Version History
-
-### v1.0.1 (Current)
-
-- Enhanced folder management system
-- Improved cross-workspace file handling
-- Optimized performance for large codebases
-- Additional color customization points
-
-### v1.0.0
-
-- Initial public release
-- Core copying functionality
-- Basic folder management
-- Clipboard detection system
-
----
-
-**Pro Tip**: Use the status bar indicators for quick access to clipboard counts and temporary storage management. The extension becomes more powerful as you build collections of commonly used code snippets!
-
-Happy coding! 🎉

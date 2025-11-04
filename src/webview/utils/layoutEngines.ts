@@ -16,8 +16,8 @@ const elk = new ELK();
 const FILE_GROUP_PADDING = 80;
 const FILE_GROUP_MARGIN = 200;
 const CODE_NODE_WIDTH = 850;
-const CODE_NODE_MIN_HEIGHT = 206; // ✅ Minimum height cho auto-fit nodes
-const CODE_NODE_DEFAULT_HEIGHT = 320; // ✅ Default height for layout calculations
+const CODE_NODE_MIN_HEIGHT = 206; // Minimum height cho auto-fit nodes
+const CODE_NODE_DEFAULT_HEIGHT = 320; // Default height for layout calculations
 const DECLARATION_NODE_WIDTH = 350;
 const DECLARATION_NODE_HEIGHT = 200;
 const MIN_NODE_SPACING = 40;
@@ -194,7 +194,7 @@ function findOptimalPosition(
   let x = preferredX;
   let y = preferredY;
 
-  // ✅ THÊM: Validate input trước khi xử lý
+  // THÊM: Validate input trước khi xử lý
   if (!isFinite(x) || !isFinite(y)) {
     console.warn(
       `[findOptimalPosition] Invalid input position: x=${x}, y=${y} - using fallback`
@@ -261,7 +261,7 @@ function findOptimalPosition(
     }
   }
 
-  // ✅ THÊM: Validate output trước khi return
+  // THÊM: Validate output trước khi return
   if (!isFinite(x) || !isFinite(y) || x < 0 || y < 0) {
     console.warn(
       `[findOptimalPosition] Invalid output position: x=${x}, y=${y} - using safe fallback`
@@ -345,7 +345,7 @@ function placeDeclarationNodesNearCallers(
       let preferredY =
         baseY + row * (DECLARATION_NODE_HEIGHT + MIN_NODE_SPACING);
 
-      // ✅ THÊM: Validate preferred position
+      // THÊM: Validate preferred position
       if (!isFinite(preferredX) || !isFinite(preferredY)) {
         console.warn(
           `[placeDeclarationNodesNearCallers] Invalid preferred position for ${declNode.id}: x=${preferredX}, y=${preferredY}`
@@ -364,7 +364,7 @@ function placeDeclarationNodesNearCallers(
         positionedDeclarations
       );
 
-      // ✅ THÊM: Validate adjusted position trước khi tạo node
+      // THÊM: Validate adjusted position trước khi tạo node
       const safePosition = {
         x: Math.max(0, isFinite(adjustedPosition.x) ? adjustedPosition.x : 100),
         y: Math.max(0, isFinite(adjustedPosition.y) ? adjustedPosition.y : 100),
@@ -372,7 +372,7 @@ function placeDeclarationNodesNearCallers(
 
       const positionedNode = {
         ...declNode,
-        position: safePosition, // ✅ Sử dụng safe position
+        position: safePosition, // Sử dụng safe position
         zIndex: 5,
         style: {
           ...declNode.style,
@@ -386,7 +386,7 @@ function placeDeclarationNodesNearCallers(
       positionedDeclarations.push(positionedNode);
 
       occupiedPositions.set(declNode.id, {
-        x: safePosition.x, // ✅ Sử dụng safe position
+        x: safePosition.x, // Sử dụng safe position
         y: safePosition.y,
         width: DECLARATION_NODE_WIDTH,
         height: DECLARATION_NODE_HEIGHT,
@@ -407,7 +407,7 @@ function placeDeclarationNodesNearCallers(
       const column = index % 3;
       const row = Math.floor(index / 3);
 
-      // ✅ THÊM: Validate fallback position
+      // THÊM: Validate fallback position
       const x =
         fallbackX + column * (DECLARATION_NODE_WIDTH + MIN_NODE_SPACING);
       const y = fallbackY + row * (DECLARATION_NODE_HEIGHT + MIN_NODE_SPACING);
@@ -419,7 +419,7 @@ function placeDeclarationNodesNearCallers(
 
       const positionedNode = {
         ...declNode,
-        position: safePosition, // ✅ Sử dụng safe position
+        position: safePosition, // Sử dụng safe position
         zIndex: 5,
         style: {
           ...declNode.style,
@@ -504,7 +504,7 @@ function layoutGroupWithDagre(
   });
 
   nodes.forEach((node) => {
-    // ✅ Use actual node height if available, fallback to default
+    // Use actual node height if available, fallback to default
     const nodeHeight =
       (node.style?.height as number) || CODE_NODE_DEFAULT_HEIGHT;
 
@@ -523,13 +523,13 @@ function layoutGroupWithDagre(
   const layoutedNodes = nodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
 
-    // ✅ THÊM: Validate và đảm bảo node dimensions hợp lệ
+    // THÊM: Validate và đảm bảo node dimensions hợp lệ
     const nodeHeight = Math.max(
       CODE_NODE_MIN_HEIGHT,
       (node.style?.height as number) || CODE_NODE_DEFAULT_HEIGHT
     );
 
-    // ✅ THÊM: Validate position values
+    // THÊM: Validate position values
     let posX = nodeWithPosition.x - CODE_NODE_WIDTH / 2;
     let posY = nodeWithPosition.y - nodeHeight / 2;
 
@@ -543,7 +543,7 @@ function layoutGroupWithDagre(
         x: posX,
         y: posY,
       },
-      // ✅ THÊM: Đảm bảo node có dimensions hợp lệ
+      // THÊM: Đảm bảo node có dimensions hợp lệ
       width: CODE_NODE_WIDTH,
       height: nodeHeight,
       style: {

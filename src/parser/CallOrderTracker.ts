@@ -27,16 +27,6 @@ export class CallOrderTracker {
     allSymbols: vscode.DocumentSymbol[],
     edges: Edge[]
   ): Promise<Map<string, { callOrder?: number; returnOrder?: number }>> {
-    Logger.info(
-      `[CallOrderTracker] 🚀 START - Root: ${rootSymbol.name} | TotalEdges: ${edges.length}`
-    );
-    Logger.info(
-      `[CallOrderTracker] 📍 Root symbol range: ${rootSymbol.range.start.line}-${rootSymbol.range.end.line}`
-    );
-    Logger.info(
-      `[CallOrderTracker] 📍 Total symbols available: ${allSymbols.length}`
-    );
-
     this.callOrderCounter = 0;
     this.edgeOrderMap.clear();
 
@@ -50,16 +40,6 @@ export class CallOrderTracker {
       visitedFunctions,
       0
     );
-
-    Logger.info(
-      `[CallOrderTracker] ✅ DONE - Processed ${this.edgeOrderMap.size} edges`
-    );
-    Logger.info(
-      `[CallOrderTracker] 📊 EdgeOrderMap keys: ${Array.from(
-        this.edgeOrderMap.keys()
-      ).join(", ")}`
-    );
-
     return this.edgeOrderMap;
   }
 
@@ -86,21 +66,17 @@ export class CallOrderTracker {
     allSymbols: vscode.DocumentSymbol[],
     edges: Edge[],
     visitedFunctions: Set<string>,
-    depth: number = 0 // ✅ THÊM THAM SỐ DEPTH
+    depth: number = 0 // THÊM THAM SỐ DEPTH
   ): Promise<void> {
     const functionId = this.createNodeId(symbol);
 
-    // ✅ CHECK DEPTH LIMIT TRƯỚC
+    // CHECK DEPTH LIMIT TRƯỚC
     if (depth > this.MAX_RECURSION_DEPTH) {
       Logger.warn(
         `[CallOrderTracker] ⚠️ Max recursion depth reached at: ${functionId} (depth=${depth})`
       );
       return;
     }
-
-    Logger.info(
-      `[CallOrderTracker] 🔍 Traversing function: ${functionId} (depth=${depth})`
-    );
 
     // Prevent infinite recursion
     if (visitedFunctions.has(functionId)) {
@@ -115,13 +91,6 @@ export class CallOrderTracker {
     const text = document.getText(symbol.range);
     const lines = text.split("\n");
 
-    Logger.info(`[CallOrderTracker] 📝 Function code (${lines.length} lines):`);
-    lines.forEach((line, idx) => {
-      if (idx > 0 && idx < 10) {
-        Logger.info(`  Line ${idx}: ${line.trim()}`);
-      }
-    });
-
     // Extract call sites in order
     const callSites = await this.extractCallSites(
       symbol,
@@ -130,15 +99,11 @@ export class CallOrderTracker {
       lines
     );
 
-    Logger.info(
-      `[CallOrderTracker] 📞 Found ${callSites.length} call sites in ${functionId}`
-    );
-
     // Process each call site in order
     for (const callSite of callSites) {
       this.callOrderCounter++;
 
-      // ✅ TÌM TARGET SYMBOL ACROSS FILES - CHỈ TRONG PROJECT
+      // TÌM TARGET SYMBOL ACROSS FILES - CHỈ TRONG PROJECT
       let targetSymbol: vscode.DocumentSymbol | undefined;
       let targetDocument: vscode.TextDocument = document;
 
@@ -151,11 +116,8 @@ export class CallOrderTracker {
       if (!targetSymbol && callSite.definitionLocation) {
         const defFilePath = callSite.definitionLocation.uri.fsPath;
 
-        // ✅ ÁP DỤNG BỘ LỌC: Chỉ xử lý project files
+        // ÁP DỤNG BỘ LỌC: Chỉ xử lý project files
         if (this.isExternalDependency(defFilePath)) {
-          Logger.info(
-            `[traverseFunction] ⚠️ Skipping external dependency: ${callSite.functionName} in ${defFilePath}`
-          );
           continue;
         }
 
@@ -229,11 +191,7 @@ export class CallOrderTracker {
       const edgeOrder = this.edgeOrderMap.get(edgeKey)!;
       edgeOrder.callOrder = this.callOrderCounter;
 
-      Logger.info(
-        `[CallOrderTracker] ✅ Assigned callOrder=${this.callOrderCounter} to edge: ${edgeKey}`
-      );
-
-      // ✅ RECURSIVE TRAVERSE - TRUYỀN DEPTH + 1
+      // RECURSIVE TRAVERSE - TRUYỀN DEPTH + 1
       const targetSymbols = await vscode.commands.executeCommand<
         vscode.DocumentSymbol[]
       >("vscode.executeDocumentSymbolProvider", targetDocument.uri);
@@ -245,7 +203,7 @@ export class CallOrderTracker {
           targetSymbols,
           edges,
           visitedFunctions,
-          depth + 1 // ✅ TĂNG DEPTH
+          depth + 1 // TĂNG DEPTH
         );
       }
 
@@ -253,10 +211,6 @@ export class CallOrderTracker {
       if (callSite.hasReturnValue) {
         this.callOrderCounter++;
         edgeOrder.returnOrder = this.callOrderCounter;
-
-        Logger.info(
-          `[CallOrderTracker] ✅ Assigned returnOrder=${this.callOrderCounter} to edge: ${edgeKey}`
-        );
       }
     }
   }
@@ -273,25 +227,15 @@ export class CallOrderTracker {
     const callSites: CallSite[] = [];
     const functionCallRegex = /\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
 
-    Logger.info(
-      `[extractCallSites] 🔍 Analyzing ${lines.length} lines in function: ${symbol.name}`
-    );
-
     for (let lineIndex = 1; lineIndex < lines.length; lineIndex++) {
       const line = lines[lineIndex];
       let match;
-
-      Logger.info(`[extractCallSites] Line ${lineIndex}: "${line.trim()}"`);
 
       while ((match = functionCallRegex.exec(line)) !== null) {
         const functionName = match[1];
         const charIndex = match.index;
         const absoluteLine = symbol.range.start.line + lineIndex;
         const position = new vscode.Position(absoluteLine, charIndex);
-
-        Logger.info(
-          `[extractCallSites] 📞 Detected call: ${functionName}() at line ${absoluteLine}, char ${charIndex}`
-        );
 
         try {
           const definitions = await vscode.commands.executeCommand<
@@ -302,7 +246,7 @@ export class CallOrderTracker {
             const def = definitions[0];
             const filePath = def.uri.fsPath;
 
-            // ✅ THÊM BỘ LỌC: Bỏ qua stdlib và vendor (giống GoParser)
+            // THÊM BỘ LỌC: Bỏ qua stdlib và vendor (giống GoParser)
             if (
               filePath.includes("/usr/local/go/") ||
               filePath.includes("/go/pkg/mod/") ||
@@ -310,17 +254,10 @@ export class CallOrderTracker {
               filePath.includes("/vendor/") ||
               !filePath.endsWith(".go")
             ) {
-              Logger.info(
-                `[extractCallSites] ⚠️ Skipping external dependency: ${functionName} in ${filePath}`
-              );
               continue;
             }
 
-            Logger.info(
-              `[extractCallSites] ✅ Definition found: ${filePath}:${def.range.start.line}`
-            );
-
-            // ✅ HỖ TRỢ CROSS-FILE: Loại bỏ check def.uri.fsPath === document.fileName
+            // HỖ TRỢ CROSS-FILE: Loại bỏ check def.uri.fsPath === document.fileName
             const targetDocument = await vscode.workspace.openTextDocument(
               def.uri
             );
@@ -344,10 +281,6 @@ export class CallOrderTracker {
                   functionName
                 );
                 const isReturn = /^\s*return\s+/.test(line.trim());
-
-                Logger.info(
-                  `[extractCallSites] ✅ Valid call site: ${cleanName} | hasReturnValue=${hasReturnValue} | isReturn=${isReturn} | file=${def.uri.fsPath}`
-                );
 
                 callSites.push({
                   functionName: cleanName,
@@ -381,10 +314,6 @@ export class CallOrderTracker {
         }
       }
     }
-
-    Logger.info(
-      `[extractCallSites] ✅ DONE - Found ${callSites.length} call sites`
-    );
 
     return callSites;
   }
