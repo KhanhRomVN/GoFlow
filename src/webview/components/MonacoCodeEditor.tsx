@@ -23,6 +23,7 @@ interface MonacoCodeEditorProps {
   onEditorHeightChange?: (height: number) => void;
   nodeId?: string; // MỚI: Node ID để lấy edges từ EdgeTracker
   allEdges?: any[]; // MỚI: Danh sách edges (có thể lấy từ EdgeTracker)
+  fadeFromLine?: number; // NEW: lines after this relative line will be visually faded
 }
 
 // Biến toàn cục để theo dõi trạng thái khởi tạo
@@ -37,6 +38,7 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   lineNumber = 1,
   onLineClick,
   onEditorHeightChange, // THÊM prop mới
+  fadeFromLine,
 }) => {
   const [isEditorReady, setIsEditorReady] = useState(false);
 
@@ -77,9 +79,26 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
     // Listen to cursor position changes
     if (onLineClick) {
       editor.onDidChangeCursorPosition((e: any) => {
-        const lineNumber = e.position.lineNumber;
-        const lineContent = editor.getModel()?.getLineContent(lineNumber) || "";
-        onLineClick(lineNumber, lineContent);
+        const absoluteLine = e.position.lineNumber; // displayed (file) line
+        const relativeLine = absoluteLine - lineNumber + 1; // convert to 1-based inside function
+        if (relativeLine < 1) {
+          return; // safety
+        }
+        const model = editor.getModel();
+        const lineContent =
+          model?.getLineContent(relativeLine) ||
+          model?.getLineContent(absoluteLine) ||
+          "";
+        // DEBUG log (webview console only)
+        try {
+          Logger.debug("[MonacoCodeEditor] Cursor line change", {
+            nodeStartLine: lineNumber,
+            absoluteLine,
+            relativeLine,
+            extractedContentSample: lineContent.slice(0, 80),
+          });
+        } catch {}
+        onLineClick(relativeLine, lineContent);
       });
     }
 
@@ -280,9 +299,32 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
     // MỚI: Apply decorations sau khi editor ready
     applyFunctionCallDecorations();
 
+    // NEW: apply fade decorations if simulation provided fadeFromLine
+    const applyFadeDecorations = () => {
+      const model = editor.getModel();
+      if (!model || typeof fadeFromLine !== "number" || fadeFromLine < 1)
+        return;
+
+      const totalLines = model.getLineCount();
+      const fadeDecorations = [];
+      for (let i = fadeFromLine + 1; i <= totalLines; i++) {
+        fadeDecorations.push({
+          range: new monaco.Range(i, 1, i, 1),
+          options: {
+            isWholeLine: true,
+            className: "execution-fade-line",
+          },
+        });
+      }
+      editor.deltaDecorations([], fadeDecorations);
+    };
+
+    applyFadeDecorations();
+
     // MỚI: Re-apply decorations when content changes
     editor.onDidChangeModelContent(() => {
       applyFunctionCallDecorations();
+      applyFadeDecorations();
     });
 
     // Set line number offset if needed

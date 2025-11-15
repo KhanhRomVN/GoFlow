@@ -116,3 +116,148 @@
   margin-top: 4px;
   line-height: 1.4;
 }
+
+/* ===============================
+   Modern Button Group Redesign
+   =============================== */
+
+.flow-graph-panel.flow-graph-panel-modern {
+  background: rgba(0,0,0,0.25);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.08);
+  padding: 6px 10px;
+  border-radius: 14px;
+  box-shadow:
+    0 4px 12px rgba(0,0,0,0.25),
+    0 0 0 1px rgba(255,255,255,0.04);
+  display: flex;
+  align-items: center;
+}
+
+.flow-graph-button-group {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.fg-btn {
+  appearance: none;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  font-size: 16px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+  color: var(--vscode-editor-foreground);
+  position: relative;
+  transition: background 0.25s ease, transform 0.18s ease, box-shadow 0.25s ease;
+  box-shadow:
+    0 2px 4px rgba(0,0,0,0.25),
+    inset 0 0 0 1px rgba(255,255,255,0.06);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.fg-btn:hover:not(:disabled) {
+  background: linear-gradient(145deg, rgba(255,255,255,0.14), rgba(255,255,255,0.06));
+  transform: translateY(-2px) scale(1.04);
+  box-shadow:
+    0 6px 16px rgba(0,0,0,0.35),
+    inset 0 0 0 1px rgba(255,255,255,0.1);
+}
+
+.fg-btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.96);
+  background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+  box-shadow:
+    0 2px 6px rgba(0,0,0,0.35),
+    inset 0 0 0 1px rgba(255,255,255,0.08);
+}
+
+.fg-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  filter: grayscale(0.4);
+}
+
+.fg-btn-active {
+  background:
+    linear-gradient(145deg, #2563eb, #1d4ed8);
+  color: #ffffff;
+  box-shadow:
+    0 6px 18px rgba(29,78,216,0.5),
+    inset 0 0 0 1px rgba(255,255,255,0.15);
+}
+
+.fg-btn-inactive {
+  background:
+    linear-gradient(145deg, #374151, #1f2937);
+  color: #d1d5db;
+}
+
+.fg-btn-active:hover {
+  background: linear-gradient(145deg, #1d4ed8, #1e40af);
+}
+
+.fg-btn-active:active {
+  background: linear-gradient(145deg, #1e40af, #1e3a8a);
+}
+
+.flow-graph-button-group .fg-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.15), transparent 60%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.flow-graph-button-group .fg-btn:hover::after {
+  opacity: 0.5;
+}
+
+/* Compact spacing for large sets of icons */
+.flow-graph-button-group {
+  flex-wrap: wrap;
+  max-width: 320px;
+}
+
+/* ===============================
+   Execution Fade (Monaco Lines)
+   =============================== */
+.monaco-editor .execution-fade-line {
+  background: linear-gradient(90deg, rgba(0,0,0,0.25), rgba(0,0,0,0.15)) !important;
+  opacity: 0.45;
+  filter: grayscale(0.6) brightness(0.8);
+}
+
+.vs .monaco-editor .execution-fade-line {
+  background: linear-gradient(90deg, rgba(0,0,0,0.06), rgba(0,0,0,0.03)) !important;
+  opacity: 0.55;
+  filter: grayscale(0.5) brightness(0.9);
+}
+
+/* Glow accent on active call line (already highlighted edge -> we can piggyback) */
+.monaco-editor .function-call-line {
+  position: relative;
+}
+.monaco-editor .function-call-line::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, #10b981, #059669);
+  box-shadow: 0 0 6px rgba(16,185,129,0.6);
+}

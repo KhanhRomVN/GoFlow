@@ -121,6 +121,8 @@ interface FunctionNodeData extends Record<string, unknown> {
   allNodes?: any[];
   lineHighlightedEdges?: Set<string>;
   onEditorHeightChange?: (height: number) => void;
+  // NEW: starting line number (relative inside this function code) after which lines are faded (execution simulation)
+  fadeFromLine?: number;
 }
 
 const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
@@ -229,6 +231,28 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
 
   const handleLineClick = useCallback(
     (lineNumber: number, lineContent: string) => {
+      // LOG: gửi log về extension để debug line click + nội dung dòng
+      try {
+        nodeData.vscode?.postMessage({
+          command: "webviewLog",
+          level: "DEBUG",
+          message: "[FunctionNode] Line click",
+          data: {
+            nodeId: nodeData.id,
+            file: nodeData.file,
+            functionStartLine: nodeData.line,
+            clickedRelativeLine: lineNumber,
+            lineContent,
+            codeLength: nodeData.code?.split("\n").length,
+          },
+        });
+      } catch (e) {
+        console.error(
+          "[FunctionNode] Failed to send webviewLog for line click",
+          e
+        );
+      }
+
       // Step 1: Resolve definition at clicked line (yellow line)
       if (nodeData.vscode && nodeData.onHighlightEdge) {
         nodeData.vscode.postMessage({
@@ -447,6 +471,7 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
               onEditorHeightChange={handleEditorHeightChange}
               nodeId={nodeData.id}
               allEdges={(window as any).__goflowEdges || []}
+              fadeFromLine={nodeData.fadeFromLine}
             />
           </div>
         </div>

@@ -80,6 +80,31 @@ export class WebviewPanel {
           case "export":
             await this.handleExport(message.dataUrl);
             break;
+          case "webviewLog": {
+            const { level = "INFO", message: logMessage, data } = message;
+            try {
+              switch (String(level).toUpperCase()) {
+                case "DEBUG":
+                  Logger.debug(`[Webview] ${logMessage}`, data);
+                  break;
+                case "INFO":
+                  Logger.info(`[Webview] ${logMessage}`, data);
+                  break;
+                case "WARN":
+                  Logger.warn(`[Webview] ${logMessage}`, data);
+                  break;
+                case "ERROR":
+                  Logger.error(`[Webview] ${logMessage}`, data);
+                  break;
+                default:
+                  Logger.info(`[Webview][UNKNOWN LEVEL] ${logMessage}`, data);
+                  break;
+              }
+            } catch (e) {
+              Logger.error("[WebviewPanel] Failed to process webviewLog", e);
+            }
+            break;
+          }
         }
       },
       null,
@@ -284,6 +309,10 @@ export class WebviewPanel {
       let match;
       const functionCalls: Array<{ name: string; index: number }> = [];
 
+      Logger.debug(
+        `[handleResolveDefinition] Scanning line (relative=${relativeLine}) content="${lineContent.trim()}"`
+      );
+
       while ((match = functionCallRegex.exec(lineContent)) !== null) {
         const functionName = match[1];
         const keywords = [
@@ -299,11 +328,46 @@ export class WebviewPanel {
         ];
 
         if (!keywords.includes(functionName)) {
+          // Skip matches inside string literals (simple heuristic)
+          const before = lineContent.substring(0, match.index);
+          const quoteCount = (before.match(/"/g) || []).length;
+          if (quoteCount % 2 === 1) {
+            continue; // inside quotes
+          }
           functionCalls.push({
             name: functionName,
             index: match.index,
           });
         }
+      }
+
+      // NEW: Always send a trace record message even if definitions fail, so UI can show line context.
+      if (functionCalls.length > 0) {
+        Logger.info(
+          `[handleResolveDefinition] Detected ${
+            functionCalls.length
+          } call(s) on relative line ${relativeLine}: ${functionCalls
+            .map((fc) => fc.name)
+            .join(", ")}`
+        );
+        this.panel.webview.postMessage({
+          command: "recordTraceLine",
+          sourceNodeId: sourceNodeId,
+          relativeLine: relativeLine,
+          lineContent: lineContent,
+          functionCalls: functionCalls.map((fc) => fc.name),
+        });
+      } else {
+        Logger.warn(
+          `[handleResolveDefinition] No function calls detected on relative line ${relativeLine} - sending raw trace line for debugging`
+        );
+        // DEBUG: send raw trace line so webview can display it (even without detected calls)
+        this.panel.webview.postMessage({
+          command: "recordTraceLineRaw",
+          sourceNodeId: sourceNodeId,
+          relativeLine: relativeLine,
+          lineContent: lineContent,
+        });
       }
 
       // Thử resolve definition cho từng function call
@@ -314,6 +378,10 @@ export class WebviewPanel {
           const definitions = await vscode.commands.executeCommand<
             vscode.Location[]
           >("vscode.executeDefinitionProvider", uri, position);
+
+          Logger.debug(
+            `[handleResolveDefinition] Resolving call "${call.name}" at absolute line ${absoluteLine}`
+          );
 
           if (definitions && definitions.length > 0) {
             const def = definitions[0];
@@ -348,11 +416,17 @@ export class WebviewPanel {
                 const targetType = this.getNodeType(targetSymbol.kind);
                 const targetId = `${targetType}_${targetSymbol.name}`;
 
+                Logger.info(
+                  `[handleResolveDefinition] Resolved call "${call.name}" -> symbol "${targetSymbol.name}" id=${targetId}`
+                );
+
                 // Gửi message về webview để highlight edge
                 this.panel.webview.postMessage({
                   command: "highlightEdge",
                   sourceNodeId: sourceNodeId,
                   targetNodeId: targetId,
+                  // MỚI: gửi thêm thông tin dòng gọi để hỗ trợ execution trace
+                  sourceCallLine: relativeLine,
                 });
 
                 if (shouldTracePath) {
@@ -368,14 +442,24 @@ export class WebviewPanel {
           }
         } catch (error) {
           Logger.error(
-            `[WebviewPanel] Failed to resolve definition for ${call.name}`,
+            `[handleResolveDefinition] Failed definition resolution for ${call.name}`,
             error
           );
         }
       }
 
-      // Nếu không tìm thấy definition nào, clear highlight
-      Logger.warn(`[WebviewPanel] No valid definition found`);
+      // Nếu không tìm thấy definition nào trong dòng này, vẫn giữ trace line đã gửi.
+      if (functionCalls.length === 0) {
+        Logger.warn(
+          `[handleResolveDefinition] No function calls detected in line ${relativeLine} (post-resolution summary)`
+        );
+      } else {
+        Logger.warn(
+          `[handleResolveDefinition] No valid definition resolved for any call at line ${relativeLine} (calls tried: ${functionCalls
+            .map((c) => c.name)
+            .join(", ")})`
+        );
+      }
       this.panel.webview.postMessage({
         command: "clearHighlight",
       });
