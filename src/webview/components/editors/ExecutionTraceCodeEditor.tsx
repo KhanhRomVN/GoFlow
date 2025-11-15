@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import Editor, { loader } from "@monaco-editor/react";
 import { Logger } from "../../../utils/webviewLogger";
+import "../../styles/execution-trace-code-editor.css";
 
 /**
  * Lightweight Monaco wrapper dedicated for ExecutionTraceCard.
@@ -116,23 +117,24 @@ const ExecutionTraceCodeEditor: React.FC<ExecutionTraceCodeEditorProps> = ({
         typeof segmentEndLine === "number" &&
         segmentEndLine >= segmentStartLine
       ) {
-        for (let i = segmentStartLine; i <= segmentEndLine; i++) {
-          // Only highlight active segment gutter (no dimming outside)
+        // Highlight active segment lines WITH GREEN GUTTER + BACKGROUND
+        for (let i = segmentStartLine; i < segmentEndLine; i++) {
           decorations.push({
             range: new monaco.Range(i, 1, i, 1),
             options: {
               isWholeLine: true,
+              className: "active-segment-line-with-bg",
               linesDecorationsClassName: "active-segment-gutter",
             },
           });
         }
-        // Accent current call line (segmentEndLine) + keep gutter highlight
+        // Call line: RED background + RED gutter ONLY
         decorations.push({
           range: new monaco.Range(segmentEndLine, 1, segmentEndLine, 1),
           options: {
             isWholeLine: true,
-            className: "function-call-line",
-            linesDecorationsClassName: "active-segment-gutter",
+            className: "function-call-line-with-bg",
+            linesDecorationsClassName: "function-call-gutter",
           },
         });
       } else if (
@@ -140,22 +142,24 @@ const ExecutionTraceCodeEditor: React.FC<ExecutionTraceCodeEditorProps> = ({
         legacyFadeFromLine >= 1 &&
         legacyFadeFromLine <= total
       ) {
-        for (let i = 1; i <= legacyFadeFromLine; i++) {
-          // Highlight gutter for all lines up to legacyFadeFromLine (active window)
+        // Legacy: highlight up to (EXCLUDING) call line WITH GREEN GUTTER + BACKGROUND
+        for (let i = 1; i < legacyFadeFromLine; i++) {
           decorations.push({
             range: new monaco.Range(i, 1, i, 1),
             options: {
               isWholeLine: true,
+              className: "active-segment-line-with-bg",
               linesDecorationsClassName: "active-segment-gutter",
             },
           });
         }
+        // Legacy call line: RED background + RED gutter ONLY
         decorations.push({
           range: new monaco.Range(legacyFadeFromLine, 1, legacyFadeFromLine, 1),
           options: {
             isWholeLine: true,
-            className: "function-call-line",
-            linesDecorationsClassName: "active-segment-gutter",
+            className: "function-call-line-with-bg",
+            linesDecorationsClassName: "function-call-gutter",
           },
         });
       }
@@ -172,13 +176,8 @@ const ExecutionTraceCodeEditor: React.FC<ExecutionTraceCodeEditorProps> = ({
 
   return (
     <div
-      style={{
-        width: "100%",
-        height,
-        borderRadius: 6,
-        overflow: "hidden",
-        position: "relative",
-      }}
+      className="execution-trace-monaco-container"
+      style={{ height }}
       data-node-id={nodeId}
     >
       <Editor
@@ -197,7 +196,8 @@ const ExecutionTraceCodeEditor: React.FC<ExecutionTraceCodeEditorProps> = ({
             String(lineNumber + editorLineNumber - 1),
           glyphMargin: false,
           folding: false,
-          lineDecorationsWidth: 0,
+          // Increase gutter width so active segment gutter decoration shows on every highlighted line
+          lineDecorationsWidth: 10,
           lineNumbersMinChars: 4,
           renderLineHighlight: "none",
           scrollbar: {
@@ -214,16 +214,7 @@ const ExecutionTraceCodeEditor: React.FC<ExecutionTraceCodeEditorProps> = ({
           padding: { top: 6, bottom: 6 },
         }}
         loading={
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              height: "100%",
-              color: "var(--vscode-editor-foreground)",
-              fontSize: 12,
-            }}
-          >
+          <div className="execution-trace-monaco-loading">
             Loading trace code...
           </div>
         }

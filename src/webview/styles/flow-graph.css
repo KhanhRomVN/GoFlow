@@ -262,6 +262,14 @@
   box-shadow: inset 0 0 0 1px rgba(16,185,129,0.30);
 }
 
+/* Active segment full-line highlight (non-call lines) */
+.monaco-editor .active-segment-line {
+  background: linear-gradient(90deg, rgba(16,185,129,0.10), rgba(16,185,129,0.05)) !important;
+}
+.vs .monaco-editor .active-segment-line {
+  background: linear-gradient(90deg, rgba(16,185,129,0.18), rgba(16,185,129,0.10)) !important;
+}
+
 /* Glow accent on active call line (already highlighted edge -> we can piggyback) */
 .monaco-editor .function-call-line {
   position: relative;
