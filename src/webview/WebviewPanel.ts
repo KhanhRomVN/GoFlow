@@ -94,7 +94,10 @@ export class WebviewPanel {
     graphData: GraphData,
     document: vscode.TextDocument
   ) {
-    const column = vscode.ViewColumn.Two;
+    // Use the currently active editor's column so the webview becomes a tab
+    // in the existing tab group instead of creating a separate group.
+    const column =
+      vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.One;
 
     if (WebviewPanel.currentPanel) {
       WebviewPanel.currentPanel.graphData = graphData;
@@ -158,9 +161,14 @@ export class WebviewPanel {
       const uri = vscode.Uri.file(file);
       const document = await vscode.workspace.openTextDocument(uri);
 
+      // Reveal the definition in the same editor group as the webview panel
+      const targetColumn =
+        this.panel.viewColumn ??
+        vscode.window.activeTextEditor?.viewColumn ??
+        vscode.ViewColumn.One;
       const editor = await vscode.window.showTextDocument(
         document,
-        vscode.ViewColumn.One
+        targetColumn
       );
 
       const position = new vscode.Position(line - 1, 0);
