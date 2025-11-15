@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useCallback } from "react";
 import { ExecutionTraceEntry } from "../drawers/ExecutionTraceDrawer";
-import MonacoCodeEditor from "../editors/MonacoCodeEditor";
+import ExecutionTraceCodeEditor from "../editors/ExecutionTraceCodeEditor";
 
 /**
  * ExecutionTraceCard
@@ -31,17 +31,18 @@ const ExecutionTraceCard: React.FC<ExecutionTraceCardProps> = ({
     let relCall: number | undefined;
 
     if (entry.type === "call") {
-      // SHOW CALLEE giống FunctionNode: hiển thị code hàm được gọi
-      code = entry.targetCode || entry.sourceCode;
-      startLine = entry.targetStartLine || entry.sourceStartLine;
-      // relCall giữ nguyên (line gọi trong caller) chỉ để hiển thị meta, không dùng highlight callee
-      relCall = undefined; // không highlight dòng gọi trong callee
+      // CALL: Hiển thị CODE CỦA CALLER để tô sáng các dòng đã chạy đến vị trí gọi
+      code = entry.sourceCode;
+      startLine = entry.sourceStartLine;
+      relCall = entry.sourceCallLine; // dùng để fade phần sau
     } else if (entry.type === "return") {
-      // Return: vẫn hiển thị callee (target) vì giống node code viewer
-      code = entry.targetCode || entry.sourceCode;
-      startLine = entry.targetStartLine || entry.sourceStartLine;
+      // RETURN: vẫn hiển thị caller để có thể minh họa tiến trình sau khi callee trả về (có thể mở rộng sau)
+      code = entry.sourceCode || entry.targetCode;
+      startLine = entry.sourceStartLine || entry.targetStartLine;
+      // Không highlight đặc biệt cho return (có thể mở rộng nếu cần)
+      relCall = undefined;
     } else {
-      // unresolved/raw: giữ nguyên source
+      // unresolved/raw: hiển thị source như trước
       code = entry.sourceCode;
       startLine = entry.sourceStartLine;
       relCall = entry.sourceCallLine;
@@ -118,6 +119,27 @@ const ExecutionTraceCard: React.FC<ExecutionTraceCardProps> = ({
     lineInfoParts.push(entry.sourceLineContent.trim());
   }
 
+  // Segment highlight (preferred): use explicit segment fields if provided
+  const segmentStartLine =
+    entry.highlightSegmentStartRelativeLine !== undefined
+      ? entry.highlightSegmentStartRelativeLine
+      : entry.type === "call" && callLineRelative
+      ? 1
+      : undefined;
+
+  const segmentEndLine =
+    entry.highlightSegmentEndRelativeLine !== undefined
+      ? entry.highlightSegmentEndRelativeLine
+      : entry.type === "call"
+      ? callLineRelative
+      : undefined;
+
+  // Legacy fallback: highlightUntilRelativeLine (earlier approach)
+  const legacyFadeFromLine =
+    segmentStartLine === 1 && segmentEndLine
+      ? segmentEndLine
+      : entry.highlightUntilRelativeLine;
+
   return (
     <div
       className="execution-trace-card"
@@ -154,23 +176,16 @@ const ExecutionTraceCard: React.FC<ExecutionTraceCardProps> = ({
         style={{ height: editorHeight, minHeight: editorHeight }}
       >
         {codeToRender && (
-          <MonacoCodeEditor
+          <ExecutionTraceCodeEditor
             value={codeToRender}
-            onChange={() => {}}
             language="go"
-            height={`${editorHeight}px`}
-            readOnly={true}
             lineNumber={baseStartLine || 1}
-            onEditorHeightChange={handleEditorHeightChange}
             nodeId={`trace-${entry.sourceNodeId}-${entry.targetNodeId}-${entry.step}`}
-            // fadeFromLine: chỉ áp dụng nếu là unresolved/raw và có relative call line
-            fadeFromLine={
-              entry.type === "call"
-                ? undefined
-                : callLineRelative && entry.type !== "return"
-                ? callLineRelative
-                : undefined
-            }
+            segmentStartLine={segmentStartLine}
+            segmentEndLine={segmentEndLine}
+            legacyFadeFromLine={legacyFadeFromLine}
+            onEditorHeightChange={handleEditorHeightChange}
+            height={`${editorHeight}px`}
           />
         )}
       </div>

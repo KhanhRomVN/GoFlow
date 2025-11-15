@@ -125,6 +125,8 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
   const [executionTrace, setExecutionTrace] = useState<ExecutionTraceEntry[]>(
     []
   );
+  // Track last CALL entry per caller to synthesize RETURN segment before next call
+  const lastCallEntryRef = useRef<Map<string, ExecutionTraceEntry>>(new Map());
   // Root function snapshot references (first function node rendered)
   const rootNodeIdRef = useRef<string | undefined>(undefined);
   const rootCodeRef = useRef<string | undefined>(undefined);
@@ -807,6 +809,27 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         return {};
       };
 
+      // (Removed callee progression helper; highlightUntilRelativeLine now uses caller sourceCallLine)
+
+      // Helper: find next call line in caller AFTER a given relative line
+      const findNextCallLineAfter = (
+        sourceId: string,
+        afterRelLine: number
+      ): number | undefined => {
+        const sourceCode = nodeCodeMap.get(sourceId);
+        if (!sourceCode) return undefined;
+        const lines = sourceCode.split("\n");
+        const callRegex = /\b([A-Za-z_][A-Za-z0-9_]*)\s*\(/;
+        for (let i = afterRelLine; i < lines.length; i++) {
+          const raw = lines[i];
+          const trimmed = raw.trim();
+          if (!trimmed || trimmed.startsWith("//")) continue;
+          if (trimmed.startsWith("func ")) continue;
+          if (callRegex.test(raw)) return i + 1; // 1-based
+        }
+        return undefined;
+      };
+
       // Collect call entries enriched with code
       const callEntries: ExecutionTraceEntry[] = flowEdges
         .filter(
@@ -833,6 +856,11 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             sourceStartLine: nodeStartLineMap.get(e.source),
             targetStartLine: nodeStartLineMap.get(e.target),
             timestamp: Date.now(),
+            // Legacy single-bound highlight
+            highlightUntilRelativeLine: relLine,
+            // NEW segment highlighting: for a CALL bright region = 1..call line
+            highlightSegmentStartRelativeLine: relLine ? 1 : undefined,
+            highlightSegmentEndRelativeLine: relLine,
           } as ExecutionTraceEntry;
         });
 
@@ -848,6 +876,22 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           const returnOrder = (e.data as any).returnOrder;
           const sourceCode = nodeCodeMap.get(e.source);
           const targetCode = nodeCodeMap.get(e.target);
+
+          // Find matching prior call entry for this edge to get its call line
+          const priorCall = callEntries.find(
+            (c) =>
+              c.sourceNodeId === e.source &&
+              c.targetNodeId === e.target &&
+              typeof c.sourceCallLine === "number"
+          );
+          const previousCallLine = priorCall?.sourceCallLine;
+
+          // Determine next call line after previous call line inside caller
+          let nextCallLine: number | undefined;
+          if (typeof previousCallLine === "number") {
+            nextCallLine = findNextCallLineAfter(e.source, previousCallLine);
+          }
+
           return {
             step: returnOrder,
             type: "return",
@@ -858,6 +902,15 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             sourceStartLine: nodeStartLineMap.get(e.source),
             targetStartLine: nodeStartLineMap.get(e.target),
             timestamp: Date.now(),
+            // Segment for RETURN: (previousCallLine+1) .. (nextCallLine or previousCallLine+1 if none)
+            highlightSegmentStartRelativeLine:
+              typeof previousCallLine === "number"
+                ? previousCallLine + 1
+                : undefined,
+            highlightSegmentEndRelativeLine:
+              typeof previousCallLine === "number"
+                ? nextCallLine || previousCallLine + 1
+                : undefined,
           } as ExecutionTraceEntry;
         });
 
@@ -1145,6 +1198,106 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           case "highlightEdge":
             handleHighlightEdge(message.sourceNodeId, message.targetNodeId);
 
+            // Dynamic execution flow: synthesize RETURN entry for previous call of same caller (if exists)
+            try {
+              const prevCall = lastCallEntryRef.current.get(
+                message.sourceNodeId
+              );
+              const sourceFnNodeForReturn = nodes.find(
+                (n) =>
+                  n.id === message.sourceNodeId && n.type === "functionNode"
+              );
+              const sourceCodeForReturn =
+                sourceFnNodeForReturn &&
+                (sourceFnNodeForReturn.data as FunctionNodeData).code
+                  ? (sourceFnNodeForReturn.data as FunctionNodeData).code
+                  : undefined;
+
+              // Helper: find next call line after a given relative line (restricted to scanning until new call line)
+              const findNextCallLineAfterDynamic = (
+                sourceCode: string,
+                afterRelLine: number,
+                clampToRelLine?: number
+              ): number | undefined => {
+                const lines = sourceCode.split("\n");
+                const callRegex = /\b([A-Za-z_][A-Za-z0-9_]*)\s*\(/;
+                for (let i = afterRelLine; i < lines.length; i++) {
+                  const raw = lines[i];
+                  const trimmed = raw.trim();
+                  if (!trimmed || trimmed.startsWith("//")) continue;
+                  if (trimmed.startsWith("func ")) continue;
+                  if (callRegex.test(raw)) {
+                    const candidate = i + 1;
+                    if (
+                      typeof clampToRelLine === "number" &&
+                      candidate > clampToRelLine
+                    )
+                      return clampToRelLine; // clamp
+                    return candidate;
+                  }
+                  if (
+                    typeof clampToRelLine === "number" &&
+                    i + 1 >= clampToRelLine
+                  ) {
+                    // reached clamp boundary without finding another call line
+                    return clampToRelLine;
+                  }
+                }
+                return clampToRelLine;
+              };
+
+              if (
+                prevCall &&
+                sourceCodeForReturn &&
+                typeof prevCall.sourceCallLine === "number"
+              ) {
+                const newCallRelLine =
+                  typeof message.sourceCallLine === "number"
+                    ? message.sourceCallLine
+                    : undefined;
+                const nextCallLine =
+                  typeof newCallRelLine === "number"
+                    ? newCallRelLine
+                    : findNextCallLineAfterDynamic(
+                        sourceCodeForReturn,
+                        prevCall.sourceCallLine,
+                        undefined
+                      );
+
+                // Construct RETURN entry segment: (prevCallLine+1) .. (nextCallLine)
+                const startSeg = prevCall.sourceCallLine + 1;
+                const endSeg =
+                  typeof nextCallLine === "number"
+                    ? nextCallLine
+                    : prevCall.sourceCallLine + 1;
+
+                setExecutionTrace((prev) => [
+                  ...prev,
+                  {
+                    step: prev.length + 1,
+                    type: "return",
+                    sourceNodeId: prevCall.sourceNodeId,
+                    targetNodeId: prevCall.targetNodeId,
+                    sourceCode: sourceCodeForReturn,
+                    sourceStartLine: (
+                      sourceFnNodeForReturn?.data as
+                        | FunctionNodeData
+                        | undefined
+                    )?.line,
+                    timestamp: Date.now(),
+                    highlightSegmentStartRelativeLine: startSeg,
+                    highlightSegmentEndRelativeLine: endSeg,
+                  },
+                ]);
+              }
+            } catch (e) {
+              logToExtension(
+                "WARN",
+                "[ExecutionFlow] Failed to synthesize return entry",
+                e
+              );
+            }
+
             // Dynamic execution flow: add CALL entry
             try {
               const sourceFnNode = nodes.find(
@@ -1169,9 +1322,14 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               const sourceLineContent =
                 sourceLines[(message.sourceCallLine || 0) - 1] || "";
 
-              setExecutionTrace((prev) => [
-                ...prev,
-                {
+              // Dynamic: highlight all executed lines in caller (source) up to call site
+              const callerProgressLine =
+                typeof message.sourceCallLine === "number"
+                  ? message.sourceCallLine
+                  : undefined;
+
+              setExecutionTrace((prev) => {
+                const newCallEntry: ExecutionTraceEntry = {
                   step: prev.length + 1,
                   type: "call",
                   sourceNodeId: message.sourceNodeId,
@@ -1190,8 +1348,18 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
                     ? (targetFnNode.data as FunctionNodeData).line
                     : undefined,
                   timestamp: Date.now(),
-                },
-              ]);
+                  highlightUntilRelativeLine: callerProgressLine,
+                  highlightSegmentStartRelativeLine:
+                    typeof message.sourceCallLine === "number" ? 1 : undefined,
+                  highlightSegmentEndRelativeLine: callerProgressLine,
+                };
+                // Update lastCallEntryRef for this caller
+                lastCallEntryRef.current.set(
+                  message.sourceNodeId,
+                  newCallEntry
+                );
+                return [...prev, newCallEntry];
+              });
             } catch (e) {
               logToExtension(
                 "WARN",

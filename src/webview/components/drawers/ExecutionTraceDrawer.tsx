@@ -23,9 +23,22 @@ export interface ExecutionTraceEntry {
   sourceCode?: string;
   targetCode?: string;
   timestamp: number;
-  // Added absolute start line numbers for source/target functions (file line where function starts)
   sourceStartLine?: number;
   targetStartLine?: number;
+  /**
+   * Deprecated: replaced by highlightSegmentStartRelativeLine / highlightSegmentEndRelativeLine
+   */
+  highlightUntilRelativeLine?: number;
+  /**
+   * NEW: Relative start line (1-based inside caller function code) of the bright segment.
+   * Lines before this line are dimmed (already executed earlier).
+   */
+  highlightSegmentStartRelativeLine?: number;
+  /**
+   * NEW: Relative end line (1-based inside caller function code) of the bright segment.
+   * Lines after this line are dimmed (future / not yet executed at this snapshot).
+   */
+  highlightSegmentEndRelativeLine?: number;
 }
 
 /**

@@ -21,9 +21,11 @@ interface MonacoCodeEditorProps {
   lineNumber?: number;
   onLineClick?: (lineNumber: number, lineContent: string) => void;
   onEditorHeightChange?: (height: number) => void;
-  nodeId?: string; // MỚI: Node ID để lấy edges từ EdgeTracker
-  allEdges?: any[]; // MỚI: Danh sách edges (có thể lấy từ EdgeTracker)
-  fadeFromLine?: number; // NEW: lines after this relative line will be visually faded
+  nodeId?: string;
+  allEdges?: any[];
+  fadeFromLine?: number; // LEGACY: keep for backward compatibility
+  segmentStartLine?: number; // NEW: first bright line (relative)
+  segmentEndLine?: number; // NEW: last bright line (relative)
 }
 
 // Biến toàn cục để theo dõi trạng thái khởi tạo
@@ -37,8 +39,10 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   readOnly = false,
   lineNumber = 1,
   onLineClick,
-  onEditorHeightChange, // THÊM prop mới
+  onEditorHeightChange,
   fadeFromLine,
+  segmentStartLine,
+  segmentEndLine,
 }) => {
   const [isEditorReady, setIsEditorReady] = useState(false);
 
@@ -299,32 +303,86 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
     // MỚI: Apply decorations sau khi editor ready
     applyFunctionCallDecorations();
 
-    // NEW: apply fade decorations if simulation provided fadeFromLine
-    const applyFadeDecorations = () => {
+    // NEW SEGMENT HIGHLIGHTING:
+    // If segmentStartLine & segmentEndLine provided:
+    //  - Lines < segmentStartLine => faded (past)
+    //  - Lines > segmentEndLine   => faded (future)
+    // Else fallback to legacy fadeFromLine behavior.
+    const applySegmentFadeDecorations = () => {
       const model = editor.getModel();
-      if (!model || typeof fadeFromLine !== "number" || fadeFromLine < 1)
-        return;
-
+      if (!model) return;
       const totalLines = model.getLineCount();
-      const fadeDecorations = [];
-      for (let i = fadeFromLine + 1; i <= totalLines; i++) {
-        fadeDecorations.push({
-          range: new monaco.Range(i, 1, i, 1),
+      const decorations: any[] = [];
+
+      if (
+        typeof segmentStartLine === "number" &&
+        segmentStartLine >= 1 &&
+        typeof segmentEndLine === "number" &&
+        segmentEndLine >= segmentStartLine
+      ) {
+        for (let i = 1; i <= totalLines; i++) {
+          if (i < segmentStartLine || i > segmentEndLine) {
+            decorations.push({
+              range: new monaco.Range(i, 1, i, 1),
+              options: {
+                isWholeLine: true,
+                className: "execution-fade-line",
+              },
+            });
+          }
+        }
+      } else if (
+        typeof fadeFromLine === "number" &&
+        fadeFromLine >= 1 &&
+        fadeFromLine <= totalLines
+      ) {
+        for (let i = fadeFromLine + 1; i <= totalLines; i++) {
+          decorations.push({
+            range: new monaco.Range(i, 1, i, 1),
+            options: {
+              isWholeLine: true,
+              className: "execution-fade-line",
+            },
+          });
+        }
+      }
+
+      // Add accent for segmentEndLine if present (call line)
+      if (
+        typeof segmentEndLine === "number" &&
+        segmentEndLine >= 1 &&
+        segmentEndLine <= totalLines
+      ) {
+        decorations.push({
+          range: new monaco.Range(segmentEndLine, 1, segmentEndLine, 1),
           options: {
             isWholeLine: true,
-            className: "execution-fade-line",
+            className: "function-call-line", // reuse existing style
+          },
+        });
+      } else if (
+        typeof fadeFromLine === "number" &&
+        fadeFromLine >= 1 &&
+        fadeFromLine <= totalLines
+      ) {
+        decorations.push({
+          range: new monaco.Range(fadeFromLine, 1, fadeFromLine, 1),
+          options: {
+            isWholeLine: true,
+            className: "function-call-line",
           },
         });
       }
-      editor.deltaDecorations([], fadeDecorations);
+
+      editor.deltaDecorations([], decorations);
     };
 
-    applyFadeDecorations();
+    applySegmentFadeDecorations();
 
     // MỚI: Re-apply decorations when content changes
     editor.onDidChangeModelContent(() => {
       applyFunctionCallDecorations();
-      applyFadeDecorations();
+      applySegmentFadeDecorations();
     });
 
     // Set line number offset if needed
