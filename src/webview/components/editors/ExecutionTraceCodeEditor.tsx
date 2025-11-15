@@ -116,23 +116,23 @@ const ExecutionTraceCodeEditor: React.FC<ExecutionTraceCodeEditorProps> = ({
         typeof segmentEndLine === "number" &&
         segmentEndLine >= segmentStartLine
       ) {
-        for (let i = 1; i <= total; i++) {
-          if (i < segmentStartLine || i > segmentEndLine) {
-            decorations.push({
-              range: new monaco.Range(i, 1, i, 1),
-              options: {
-                isWholeLine: true,
-                className: "execution-fade-line",
-              },
-            });
-          }
+        for (let i = segmentStartLine; i <= segmentEndLine; i++) {
+          // Only highlight active segment gutter (no dimming outside)
+          decorations.push({
+            range: new monaco.Range(i, 1, i, 1),
+            options: {
+              isWholeLine: true,
+              linesDecorationsClassName: "active-segment-gutter",
+            },
+          });
         }
-        // Accent current call line (segmentEndLine)
+        // Accent current call line (segmentEndLine) + keep gutter highlight
         decorations.push({
           range: new monaco.Range(segmentEndLine, 1, segmentEndLine, 1),
           options: {
             isWholeLine: true,
             className: "function-call-line",
+            linesDecorationsClassName: "active-segment-gutter",
           },
         });
       } else if (
@@ -140,12 +140,13 @@ const ExecutionTraceCodeEditor: React.FC<ExecutionTraceCodeEditorProps> = ({
         legacyFadeFromLine >= 1 &&
         legacyFadeFromLine <= total
       ) {
-        for (let i = legacyFadeFromLine + 1; i <= total; i++) {
+        for (let i = 1; i <= legacyFadeFromLine; i++) {
+          // Highlight gutter for all lines up to legacyFadeFromLine (active window)
           decorations.push({
             range: new monaco.Range(i, 1, i, 1),
             options: {
               isWholeLine: true,
-              className: "execution-fade-line",
+              linesDecorationsClassName: "active-segment-gutter",
             },
           });
         }
@@ -154,6 +155,7 @@ const ExecutionTraceCodeEditor: React.FC<ExecutionTraceCodeEditorProps> = ({
           options: {
             isWholeLine: true,
             className: "function-call-line",
+            linesDecorationsClassName: "active-segment-gutter",
           },
         });
       }
