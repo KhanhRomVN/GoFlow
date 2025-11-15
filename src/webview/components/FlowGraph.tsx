@@ -14,19 +14,19 @@ import {
 import "@xyflow/react/dist/style.css";
 import "../styles/common.css";
 import "../styles/flow-graph.css";
-import FunctionNode from "./FunctionNode";
-import FileGroupContainer from "./FileGroupContainer";
+import FunctionNode from "./nodes/FunctionNode";
+import FileGroupContainer from "./containers/FileGroupContainer";
 import { GraphData } from "../../models/Node";
 import { detectFramework, FrameworkConfig } from "../configs/layoutStrategies";
 import { applyLayout } from "../utils/layoutEngines";
 import { EdgeTracker, EdgeConnection } from "../utils/EdgeTracker";
 import { Logger } from "../../utils/webviewLogger";
-import NodeVisibilityDrawer from "./NodeVisibilityDrawer";
-import DeclarationNode from "./DeclarationNode";
-import CallOrderEdge from "./CallOrderEdge";
+import NodeVisibilityDrawer from "./drawers/NodeVisibilityDrawer";
+import DeclarationNode from "./nodes/DeclarationNode";
+import CallOrderEdge from "./edges/CallOrderEdge";
 import ExecutionTraceDrawer, {
   ExecutionTraceEntry,
-} from "./ExecutionTraceDrawer";
+} from "./drawers/ExecutionTraceDrawer";
 
 interface FunctionNodeData extends Record<string, unknown> {
   id: string;
@@ -128,6 +128,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
   // Root function snapshot references (first function node rendered)
   const rootNodeIdRef = useRef<string | undefined>(undefined);
   const rootCodeRef = useRef<string | undefined>(undefined);
+  const rootStartLineRef = useRef<number | undefined>(undefined);
 
   // Auto-save hidden nodes
   useEffect(() => {
@@ -770,18 +771,21 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
 
   const buildStaticExecutionTrace = useCallback(
     (flowEdges: FlowEdge[], flowNodes: FlowNode[]) => {
-      // Build quick lookup maps for node code & label
+      // Build quick lookup maps for node code, label & start line
       const nodeCodeMap = new Map<string, string>();
       const nodeLabelMap = new Map<string, string>();
+      const nodeStartLineMap = new Map<string, number>();
       flowNodes.forEach((n) => {
         if (n.type === "functionNode") {
           const fnData = n.data as FunctionNodeData;
           nodeCodeMap.set(n.id, fnData.code || "");
           nodeLabelMap.set(n.id, fnData.label || n.id);
+          nodeStartLineMap.set(n.id, fnData.line);
         } else if (n.type === "declarationNode") {
           const declData = n.data as DeclarationNodeData;
           nodeCodeMap.set(n.id, declData.code || "");
           nodeLabelMap.set(n.id, declData.label || n.id);
+          nodeStartLineMap.set(n.id, declData.line);
         }
       });
 
@@ -826,6 +830,8 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             sourceLineContent: content,
             sourceCode,
             targetCode,
+            sourceStartLine: nodeStartLineMap.get(e.source),
+            targetStartLine: nodeStartLineMap.get(e.target),
             timestamp: Date.now(),
           } as ExecutionTraceEntry;
         });
@@ -849,6 +855,8 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             targetNodeId: e.target,
             sourceCode,
             targetCode,
+            sourceStartLine: nodeStartLineMap.get(e.source),
+            targetStartLine: nodeStartLineMap.get(e.target),
             timestamp: Date.now(),
           } as ExecutionTraceEntry;
         });
@@ -857,6 +865,72 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
       const merged = [...callEntries, ...returnEntries].sort(
         (a, b) => (a.step ?? 0) - (b.step ?? 0)
       );
+
+      // Correlate call/return pairs per edge (source->target)
+      const correlationMap: Record<
+        string,
+        {
+          callStep?: number;
+          returnStep?: number;
+          callOrder?: number;
+          returnOrder?: number;
+          sourceNodeId: string;
+          targetNodeId: string;
+          hasSourceLineContent?: boolean;
+        }
+      > = {};
+
+      callEntries.forEach((c) => {
+        const key = `${c.sourceNodeId}->${c.targetNodeId}`;
+        correlationMap[key] = {
+          ...(correlationMap[key] || {}),
+          callStep: c.step,
+          callOrder: c.step,
+          sourceNodeId: c.sourceNodeId,
+          targetNodeId: c.targetNodeId,
+          hasSourceLineContent: !!c.sourceLineContent,
+        };
+      });
+      returnEntries.forEach((r) => {
+        const key = `${r.sourceNodeId}->${r.targetNodeId}`;
+        correlationMap[key] = {
+          ...(correlationMap[key] || {}),
+          returnStep: r.step,
+          returnOrder: r.step,
+          sourceNodeId: r.sourceNodeId,
+          targetNodeId: r.targetNodeId,
+        };
+      });
+
+      // Detect anomalies: return before call, missing return, missing call
+      const anomalies: {
+        key: string;
+        issue: string;
+        data: any;
+      }[] = [];
+      Object.entries(correlationMap).forEach(([key, v]) => {
+        if (v.callStep !== undefined && v.returnStep !== undefined) {
+          if ((v.returnStep as number) < (v.callStep as number)) {
+            anomalies.push({
+              key,
+              issue: "RETURN_BEFORE_CALL",
+              data: v,
+            });
+          }
+        } else if (v.callStep !== undefined && v.returnStep === undefined) {
+          anomalies.push({
+            key,
+            issue: "MISSING_RETURN",
+            data: v,
+          });
+        } else if (v.callStep === undefined && v.returnStep !== undefined) {
+          anomalies.push({
+            key,
+            issue: "RETURN_WITHOUT_CALL",
+            data: v,
+          });
+        }
+      });
 
       setExecutionTrace(merged);
       logToExtension(
@@ -867,8 +941,21 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           returnCount: returnEntries.length,
           total: merged.length,
           withSourceLines: callEntries.filter((c) => c.sourceCallLine).length,
+          edgePairs: Object.keys(correlationMap).length,
+          anomalyCount: anomalies.length,
         }
       );
+
+      if (anomalies.length > 0) {
+        logToExtension("WARN", "[StaticTrace] Detected execution anomalies", {
+          anomalies: anomalies.slice(0, 50), // cap for safety
+        });
+      } else {
+        logToExtension(
+          "DEBUG",
+          "[StaticTrace] No execution anomalies detected"
+        );
+      }
     },
     [logToExtension]
   );
@@ -897,8 +984,10 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           if (firstFn) {
             rootNodeIdRef.current = firstFn.id;
             rootCodeRef.current = (firstFn.data as FunctionNodeData).code || "";
+            rootStartLineRef.current = (firstFn.data as FunctionNodeData).line;
             logToExtension("INFO", "[ExecutionFlow] Root function captured", {
               rootNodeId: rootNodeIdRef.current,
+              rootStartLine: rootStartLineRef.current,
             });
           }
         }
@@ -1094,6 +1183,12 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
                   sourceLineContent: sourceLineContent,
                   sourceCode,
                   targetCode,
+                  sourceStartLine: sourceFnNode
+                    ? (sourceFnNode.data as FunctionNodeData).line
+                    : undefined,
+                  targetStartLine: targetFnNode
+                    ? (targetFnNode.data as FunctionNodeData).line
+                    : undefined,
                   timestamp: Date.now(),
                 },
               ]);
@@ -1139,6 +1234,9 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
                     sourceCallLine: message.relativeLine,
                     sourceLineContent: srcLineContent,
                     sourceCode,
+                    sourceStartLine: sourceFnNode
+                      ? (sourceFnNode.data as FunctionNodeData).line
+                      : undefined,
                     timestamp: Date.now(),
                   },
                 ]);
@@ -1171,6 +1269,9 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
                   sourceCallLine: message.relativeLine,
                   sourceLineContent: srcLineContent,
                   sourceCode,
+                  sourceStartLine: sourceFnNode
+                    ? (sourceFnNode.data as FunctionNodeData).line
+                    : undefined,
                   timestamp: Date.now(),
                 },
               ]);
@@ -1402,6 +1503,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         trace={executionTrace}
         rootNodeId={rootNodeIdRef.current}
         rootCode={rootCodeRef.current}
+        rootStartLine={rootStartLineRef.current}
         onClear={() => {
           setExecutionTrace([]);
         }}
