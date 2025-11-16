@@ -280,8 +280,22 @@
   padding: 0;
 }
 
+/* Extra spacing for Monaco line number gutter */
+.code-entity-node-monaco-wrapper .monaco-editor .margin {
+  /* Remove right padding that caused overlap; keep default width */
+  padding-right: 0 !important;
+}
+
+/* Padding inside each line number element */
+.code-entity-node-monaco-wrapper .monaco-editor .line-numbers {
+  /* Increase horizontal padding for readability */
+  padding: 0 8px !important;
+  display: inline-block;
+}
+
 .code-entity-node-monaco-wrapper .monaco-editor .view-lines {
-  padding: 8px 0;
+  /* Add left padding to push code away from line numbers */
+  padding: 8px 0 8px 4px;
 }
 
 /* Saving Indicator */
@@ -655,7 +669,7 @@
   margin-left: 8px;
   font-size: 11px;
   font-weight: 700;
-  color: #F59E0B;
+  color: #F59E0B; 
   text-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
   animation: pulse-queue 2s ease-in-out infinite;
   padding: 4px 8px;

@@ -63,3 +63,19 @@
   font-family: 'Courier New', monospace;
   opacity: 0.7;
 }
+
+/* ===============================
+   Line number gutter padding
+   (ExecutionTraceCodeEditor only)
+   =============================== */
+
+/* Extra horizontal space inside line numbers */
+.execution-trace-monaco-container .monaco-editor .line-numbers {
+  padding: 0 8px !important;
+  display: inline-block;
+}
+
+/* Slight left padding to push code away from gutter */
+.execution-trace-monaco-container .monaco-editor .view-lines {
+  padding-left: 4px !important;
+}

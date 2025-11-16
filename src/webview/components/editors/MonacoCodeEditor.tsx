@@ -28,17 +28,15 @@ interface MonacoCodeEditorProps {
   segmentEndLine?: number;
 }
 
-// Biến toàn cục để theo dõi trạng thái khởi tạo
+// Global init state
 let monacoInitialized = false;
 let currentMonacoTheme: string | undefined;
 
-// DEBUG INSTRUMENTATION - Enhanced counters
+// DEBUG INSTRUMENTATION - counters
 let monacoRenderCount = 0;
 let monacoMountCount = 0;
 let monacoThemeSetCount = 0;
 let monacoThemeSkipCount = 0;
-let monacoFunctionDecoApplyCount = 0;
-let monacoSegmentDecoApplyCount = 0;
 
 const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   value,
@@ -125,7 +123,7 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       lineCount: editor.getModel()?.getLineCount?.(),
     });
 
-    // Listen to cursor position changes
+    // Cursor position -> line click (kept, but without visual gutter decorations)
     if (onLineClick) {
       let cursorIntentTimeout: any = null;
       editor.onDidChangeCursorPosition((e: any) => {
@@ -162,7 +160,6 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
           return;
         }
 
-        // Debounce rapid cursor moves
         if (cursorIntentTimeout) {
           clearTimeout(cursorIntentTimeout);
         }
@@ -215,7 +212,7 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
             nodeId,
             absoluteLine,
             relativeLine,
-            lineContent: lineContent.substring(0, 100), // First 100 chars
+            lineContent: lineContent.substring(0, 100),
           });
 
           onLineClick(relativeLine, lineContent);
@@ -223,9 +220,8 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       });
     }
 
-    // FORCE DARK THEME - No brightness detection to avoid theme switching bugs
+    // Force dark theme
     const themeName = "vs-dark";
-
     try {
       if (currentMonacoTheme !== themeName) {
         monacoThemeSetCount++;
@@ -239,7 +235,6 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       } else {
         monacoThemeSkipCount++;
         if (monacoThemeSkipCount % 10 === 0) {
-          // Log every 10th skip to reduce noise
           Logger.debug(
             `[MonacoCodeEditor] Theme SKIPPED (already ${themeName})`,
             {
@@ -256,277 +251,43 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       });
     }
 
-    // Stable decoration ID holders to prevent flicker during text selection caused by full decoration flushes.
-    // Using previous IDs lets Monaco diff decorations incrementally instead of clearing/repainting everything.
-    let functionCallDecorationIds: string[] = [];
-    let segmentFadeDecorationIds: string[] = [];
-
-    // Apply decorations for function call lines (stable diff to avoid flicker)
-    const applyFunctionCallDecorations = () => {
-      const model = editor.getModel();
-      if (!model) {
-        Logger.warn(`[MonacoCodeEditor] No model for decorations`, { nodeId });
-        return;
-      }
-
-      Logger.debug(`[MonacoCodeEditor] Applying function call decorations`, {
-        nodeId,
-        lineCount: model.getLineCount(),
-        previousDecorationCount: functionCallDecorationIds.length,
-      });
-
-      const newDecorations: any[] = [];
-      const functionCallRegex = /\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
-
-      for (let i = 1; i <= model.getLineCount(); i++) {
-        const lineContent = model.getLineContent(i);
-        const matches = Array.from(
-          lineContent.matchAll(functionCallRegex)
-        ) as RegExpMatchArray[];
-        if (matches.length === 0) continue;
-
-        const trimmedLine = lineContent.trim();
-        if (trimmedLine.startsWith("//")) continue;
-        if (trimmedLine.startsWith("func ")) continue;
-
-        matches.forEach((match, idx) => {
-          const functionName = match[1];
-          const keywords = [
-            "if",
-            "for",
-            "switch",
-            "return",
-            "defer",
-            "go",
-            "select",
-            "case",
-            "range",
-          ];
-          if (keywords.includes(functionName)) return;
-
-          const charIndex = match.index ?? 0;
-          const hasReturnValue = detectReturnValueUsage(
-            lineContent,
-            charIndex,
-            functionName
-          );
-          const badgeColor = hasReturnValue ? "#10b981" : "#6b7280";
-
-          newDecorations.push({
-            range: new monaco.Range(i, 1, i, 1),
-            options: {
-              isWholeLine: true,
-              className: "function-call-line",
-              glyphMarginClassName: "function-call-glyph",
-              glyphMarginHoverMessage: {
-                value: `**Calls:** ${functionName}()`,
-              },
-              overviewRuler: {
-                color: badgeColor,
-                position: monaco.editor.OverviewRulerLane.Left,
-              },
-              minimap: {
-                color: badgeColor,
-                position: monaco.editor.MinimapPosition.Inline,
-              },
-              linesDecorationsClassName: "function-call-badge",
-              before: {
-                content: `${idx + 1}`,
-                inlineClassName: "function-call-badge-content",
-                inlineClassNameAffectsLetterSpacing: true,
-              },
-            },
-          });
-        });
-      }
-
-      functionCallDecorationIds = editor.deltaDecorations(
-        functionCallDecorationIds,
-        newDecorations
-      );
-      monacoFunctionDecoApplyCount++;
-
-      Logger.debug(`[MonacoCodeEditor] Function decorations applied`, {
-        nodeId,
-        newDecorationCount: newDecorations.length,
-        totalDecorationCount: functionCallDecorationIds.length,
-        applyCount: monacoFunctionDecoApplyCount,
-      });
-    };
-
-    // Helper function to detect return value usage
-    const detectReturnValueUsage = (
-      line: string,
-      callPosition: number,
-      functionName: string
-    ): boolean => {
-      const beforeCall = line.substring(0, callPosition).trim();
-      const lineUpToCall = line.substring(
-        0,
-        callPosition + functionName.length
-      );
-
-      // Assignment patterns
-      if (/:=/.test(lineUpToCall) || /[^=!<>]=(?!=)/.test(lineUpToCall)) {
-        return true;
-      }
-
-      // Return statement
-      if (/\breturn\s+$/.test(beforeCall)) return true;
-
-      // Comparison
-      if (/[!=<>]+\s*$/.test(beforeCall)) return true;
-
-      // Function argument
-      if (/[,(]\s*$/.test(beforeCall)) return true;
-
-      // Standalone call
-      const standalonePattern = /^(\s*)(\w+\.)*\w+\s*$/;
-      const checkStr = line
-        .substring(0, callPosition + functionName.length)
-        .trim();
-
-      if (standalonePattern.test(checkStr)) return false;
-
-      return beforeCall.length > 0 && !/^\s*$/.test(beforeCall);
-    };
-
-    // THAY ĐỔI: Tính toán chiều cao dựa trên số dòng thực tế
-    const lineHeight = 19; // Monaco default line height
-    const maxLines = 25; // Giới hạn tối đa 25 dòng
+    // Dynamic height calculation (unchanged)
+    const lineHeight = 19;
+    const maxLines = 25;
     const maxHeight = lineHeight * maxLines;
-    const minHeight = lineHeight * 3; // Tối thiểu 3 dòng
+    const minHeight = lineHeight * 3;
 
-    // Update editor height based on actual line count
     const updateEditorHeight = () => {
       const model = editor.getModel();
       if (!model) return;
-
-      // Lấy số dòng thực tế trong code
       const actualLineCount = model.getLineCount();
-
-      // Tính chiều cao dựa trên số dòng thực tế, nhưng cap ở maxLines
       const targetLineCount = Math.min(actualLineCount, maxLines);
       const targetHeight = Math.max(
         minHeight,
         targetLineCount * lineHeight + 16
-      ); // +16 cho padding top/bottom (8px each) từ Monaco options
+      );
 
-      // Layout editor với chiều cao mới
       editor.layout({
         width: editor.getLayoutInfo().width,
         height: targetHeight,
       });
 
-      // Thông báo về parent node để update node height
       if (onEditorHeightChange) {
         onEditorHeightChange(targetHeight);
       }
     };
 
-    // Initial height update
     updateEditorHeight();
-
-    // Update height when content changes
     editor.onDidContentSizeChange(updateEditorHeight);
 
-    // MỚI: Apply decorations sau khi editor ready
-    applyFunctionCallDecorations();
-
-    // NEW SEGMENT HIGHLIGHTING:
-    // If segmentStartLine & segmentEndLine provided:
-    //  - Lines < segmentStartLine => faded (past)
-    //  - Lines > segmentEndLine   => faded (future)
-    // Else fallback to legacy fadeFromLine behavior.
-    const applySegmentFadeDecorations = () => {
-      const model = editor.getModel();
-      if (!model) return;
-      const totalLines = model.getLineCount();
-      const newDecorations: any[] = [];
-
-      if (
-        typeof segmentStartLine === "number" &&
-        segmentStartLine >= 1 &&
-        typeof segmentEndLine === "number" &&
-        segmentEndLine >= segmentStartLine
-      ) {
-        for (let i = 1; i <= totalLines; i++) {
-          if (i < segmentStartLine || i > segmentEndLine) {
-            newDecorations.push({
-              range: new monaco.Range(i, 1, i, 1),
-              options: {
-                isWholeLine: true,
-                className: "execution-fade-line",
-              },
-            });
-          }
-        }
-      } else if (
-        typeof fadeFromLine === "number" &&
-        fadeFromLine >= 1 &&
-        fadeFromLine <= totalLines
-      ) {
-        for (let i = fadeFromLine + 1; i <= totalLines; i++) {
-          newDecorations.push({
-            range: new monaco.Range(i, 1, i, 1),
-            options: {
-              isWholeLine: true,
-              className: "execution-fade-line",
-            },
-          });
-        }
-      }
-
-      if (
-        typeof segmentEndLine === "number" &&
-        segmentEndLine >= 1 &&
-        segmentEndLine <= totalLines
-      ) {
-        newDecorations.push({
-          range: new monaco.Range(segmentEndLine, 1, segmentEndLine, 1),
-          options: {
-            isWholeLine: true,
-            className: "function-call-line",
-          },
-        });
-      } else if (
-        typeof fadeFromLine === "number" &&
-        fadeFromLine >= 1 &&
-        fadeFromLine <= totalLines
-      ) {
-        newDecorations.push({
-          range: new monaco.Range(fadeFromLine, 1, fadeFromLine, 1),
-          options: {
-            isWholeLine: true,
-            className: "function-call-line",
-          },
-        });
-      }
-
-      segmentFadeDecorationIds = editor.deltaDecorations(
-        segmentFadeDecorationIds,
-        newDecorations
-      );
-      monacoSegmentDecoApplyCount++;
-    };
-
-    applySegmentFadeDecorations();
-
-    // MỚI: Re-apply decorations when content changes
-    editor.onDidChangeModelContent(() => {
-      applyFunctionCallDecorations();
-      applySegmentFadeDecorations();
-    });
-
-    // Set line number offset if needed
     if (lineNumber > 1) {
       editor.revealLineInCenter(1);
     }
   };
 
-  const handleChange = (value: string | undefined) => {
-    if (value !== undefined) {
-      onChange(value);
+  const handleChange = (v: string | undefined) => {
+    if (v !== undefined) {
+      onChange(v);
     }
   };
 
@@ -559,12 +320,14 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
           fontSize: 12,
           fontFamily: "'Courier New', monospace",
           lineHeight: 19,
-          lineNumbers: (editorLineNumber) =>
+          // Remove gutter: disable line numbers completely
+          lineNumbers: (editorLineNumber: number) =>
             String(lineNumber + editorLineNumber - 1),
+          // Increase gutter width so code doesn't overlap padded line numbers
+          lineNumbersMinChars: 4,
           glyphMargin: false,
           folding: false,
           lineDecorationsWidth: 0,
-          lineNumbersMinChars: 4,
           renderLineHighlight: "none",
           scrollbar: {
             vertical: "hidden",
