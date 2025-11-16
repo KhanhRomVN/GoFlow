@@ -4,31 +4,6 @@ import MonacoCodeEditor from "../editors/MonacoCodeEditor";
 import "../../styles/function-node.css";
 import { Logger } from "../../../utils/webviewLogger";
 
-/**
- * ╔══════════════════════════════════════════════════════════════════════════╗
- * ║                    ⚠️  CRITICAL: DO NOT REMOVE  ⚠️                       ║
- * ╠══════════════════════════════════════════════════════════════════════════╣
- * ║                                                                          ║
- * ║  CƠ CHẾ 2 TRẠNG THÁI (Move Mode / Static Mode) LÀ BẮT BUỘC             ║
- * ║                                                                          ║
- * ║  1. State: `isMoveMode` (mặc định = true)                               ║
- * ║     - Move Mode: Node draggable, Monaco Editor read-only                ║
- * ║     - Static Mode: Node static, Monaco Editor có thể select text        ║
- * ║                                                                          ║
- * ║  2. useEffect đồng bộ với ReactFlow:                                    ║
- * ║     - Gửi message `setNodeDraggable` để ReactFlow cập nhật draggable    ║
- * ║                                                                          ║
- * ║  3. Event handlers bắt buộc:                                            ║
- * ║     - onMouseDown/onPointerDown: chặn drag khi Static Mode              ║
- * ║     - Không chặn = conflict giữa ReactFlow drag và Monaco selection     ║
- * ║                                                                          ║
- * ║  4. CSS class `.move-mode` và styles liên quan KHÔNG ĐƯỢC XÓA           ║
- * ║                                                                          ║
- * ║  ⚠️  XÓA CƠ CHẾ NÀY SẼ PHÁ VỠ TOÀN BỘ TƯƠNG TÁC NODE VÀ EDITOR  ⚠️      ║
- * ║                                                                          ║
- * ╚══════════════════════════════════════════════════════════════════════════╝
- */
-
 const NODE_COLORS = {
   function: {
     header: "bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500",
@@ -154,7 +129,6 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [isNodeHighlighted, setIsNodeHighlighted] = useState(false);
-  const [isMoveMode, setIsMoveMode] = useState(true);
   const [editorHeight, setEditorHeight] = useState(150);
   const [totalNodeHeight, setTotalNodeHeight] = useState(206); // Initial: 56 (header) + 150 (editor) + 8 (padding)
   const nodeData = data as FunctionNodeData;
@@ -170,14 +144,14 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
         {
           command: "setNodeDraggable",
           nodeId: nodeData.id,
-          draggable: isMoveMode,
+          draggable: true,
         },
         "*"
       );
     } catch (e) {
       console.error("[FunctionNode] Failed to post setNodeDraggable", e);
     }
-  }, [isMoveMode, nodeData.id]);
+  }, [true, nodeData.id]);
 
   // Handle editor height changes
   const handleEditorHeightChange = useCallback(
@@ -372,15 +346,15 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
           isResizing ? "resizing" : ""
         } ${isNodeHighlighted ? "node-highlighted" : ""} ${
           lineHighlightedEdges.size > 0 ? "line-highlighted" : ""
-        } ${isMoveMode ? "move-mode" : ""}`}
+        } ${true ? "move-mode" : ""}`}
         data-type="functionNode"
         onClick={handleNodeClick}
         onMouseDown={(e) => {
           // Ở chế độ đứng yên: chặn drag ReactFlow (cho phép chọn text trong editor)
-          if (!isMoveMode) e.stopPropagation();
+          if (!true) e.stopPropagation();
         }}
         onPointerDown={(e) => {
-          if (!isMoveMode) e.stopPropagation();
+          if (!true) e.stopPropagation();
         }}
       >
         {/* Smart Handles - chỉ hiển thị handles có khả năng được sử dụng */}
@@ -509,10 +483,10 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
             className="code-entity-node-monaco-wrapper nodrag"
             style={{ height: "100%" }}
             onMouseDown={(e) => {
-              if (!isMoveMode) e.stopPropagation();
+              if (!true) e.stopPropagation();
             }}
             onPointerDown={(e) => {
-              if (!isMoveMode) e.stopPropagation();
+              if (!true) e.stopPropagation();
             }}
           >
             <MonacoCodeEditor
@@ -520,7 +494,7 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
               onChange={handleCodeChange}
               language="go"
               height="100%"
-              readOnly={isMoveMode} // Move mode: khóa edit & selection (CSS sẽ chặn pointer-events)
+              readOnly={true}
               lineNumber={nodeData.line}
               onLineClick={handleLineClick}
               onEditorHeightChange={handleEditorHeightChange}
