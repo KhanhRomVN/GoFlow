@@ -4,6 +4,15 @@ import MonacoCodeEditor from "../editors/MonacoCodeEditor";
 import "../../styles/function-node.css";
 import { Logger } from "../../../utils/webviewLogger";
 
+// DEBUG instrumentation counters (module scope so they persist across renders)
+let fnRenderCount = 0;
+let fnMountCount = 0;
+let fnHeightChangeCount = 0;
+let fnLineClickCount = 0;
+let fnNodeClickToggleCount = 0;
+let fnSaveScheduleCount = 0;
+let fnSaveExecCount = 0;
+
 const NODE_COLORS = {
   function: {
     header: "bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500",
@@ -126,12 +135,34 @@ interface FunctionNodeData extends Record<string, unknown> {
 }
 
 const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
+  // Render counter
+  try {
+    fnRenderCount++;
+    Logger.debug("[FunctionNode][Render]", {
+      id,
+      renderCount: fnRenderCount,
+      selected,
+    });
+  } catch {}
+
   const [isSaving, setIsSaving] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [isNodeHighlighted, setIsNodeHighlighted] = useState(false);
   const [editorHeight, setEditorHeight] = useState(150);
   const [totalNodeHeight, setTotalNodeHeight] = useState(206); // Initial: 56 (header) + 150 (editor) + 8 (padding)
   const nodeData = data as FunctionNodeData;
+
+  // Mount effect
+  useEffect(() => {
+    fnMountCount++;
+    try {
+      Logger.debug("[FunctionNode][Mount]", {
+        id: nodeData.id,
+        mountCount: fnMountCount,
+        codeLength: nodeData.code?.length,
+      });
+    } catch {}
+  }, []);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const nodeRef = useRef<HTMLDivElement>(null);
 
@@ -157,6 +188,14 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
   const handleEditorHeightChange = useCallback(
     (height: number) => {
       setEditorHeight(height);
+      fnHeightChangeCount++;
+      try {
+        Logger.debug("[FunctionNode][EditorHeightChange]", {
+          id: nodeData.id,
+          newHeight: height,
+          heightChangeCount: fnHeightChangeCount,
+        });
+      } catch {}
 
       // Calculate new total node height
       const newTotalHeight = 56 + height + 8; // header (56) + editor + padding (8)
@@ -207,6 +246,15 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
         clearTimeout(saveTimeoutRef.current);
       }
 
+      fnSaveScheduleCount++;
+      try {
+        Logger.debug("[FunctionNode][SaveScheduled]", {
+          id: nodeData.id,
+          pendingDelayMs: 1500,
+          saveScheduleCount: fnSaveScheduleCount,
+        });
+      } catch {}
+
       saveTimeoutRef.current = setTimeout(async () => {
         if (!nodeData.vscode) {
           console.error("[FunctionNode] VSCode API not available");
@@ -216,6 +264,15 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
         setIsSaving(true);
 
         try {
+          fnSaveExecCount++;
+          try {
+            Logger.debug("[FunctionNode][SaveExec]", {
+              id: nodeData.id,
+              saveExecCount: fnSaveExecCount,
+              codeLength: value.length,
+            });
+          } catch {}
+
           nodeData.vscode.postMessage({
             command: "saveCode",
             file: nodeData.file,
@@ -269,6 +326,15 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
         );
       }
 
+      fnLineClickCount++;
+      try {
+        Logger.debug("[FunctionNode][LineClick]", {
+          id: nodeData.id,
+          relativeLine: lineNumber,
+          lineClickCount: fnLineClickCount,
+        });
+      } catch {}
+
       // Step 1: Resolve definition at clicked line (yellow line)
       if (nodeData.vscode && nodeData.onHighlightEdge) {
         nodeData.vscode.postMessage({
@@ -308,9 +374,25 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
         if (isNodeHighlighted) {
           nodeData.onClearNodeHighlight();
           setIsNodeHighlighted(false);
+          fnNodeClickToggleCount++;
+          try {
+            Logger.debug("[FunctionNode][NodeClickToggle]", {
+              id: nodeData.id,
+              toggledTo: false,
+              toggleCount: fnNodeClickToggleCount,
+            });
+          } catch {}
         } else {
           nodeData.onNodeHighlight(nodeData.id);
           setIsNodeHighlighted(true);
+          fnNodeClickToggleCount++;
+          try {
+            Logger.debug("[FunctionNode][NodeClickToggle]", {
+              id: nodeData.id,
+              toggledTo: true,
+              toggleCount: fnNodeClickToggleCount,
+            });
+          } catch {}
         }
       }
     },
