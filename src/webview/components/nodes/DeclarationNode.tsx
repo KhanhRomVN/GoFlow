@@ -127,7 +127,17 @@ const DeclarationNode: React.FC<NodeProps> = ({ data, selected }) => {
         </div>
 
         <div className="declaration-node-body">
-          <pre className="declaration-node-code">
+          <pre
+            className="declaration-node-code"
+            onMouseDown={(e) => {
+              // Ngăn kéo node khi đang bôi đen / select code
+              e.stopPropagation();
+            }}
+            onPointerDown={(e) => {
+              // Hỗ trợ pointer events (touch, pen)
+              e.stopPropagation();
+            }}
+          >
             <code>{nodeData.code}</code>
           </pre>
         </div>

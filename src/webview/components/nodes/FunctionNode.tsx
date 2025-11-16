@@ -129,6 +129,7 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [isNodeHighlighted, setIsNodeHighlighted] = useState(false);
+  const [isMoveMode, setIsMoveMode] = useState(false); // NEW: chế độ di chuyển bật/tắt
   const [editorHeight, setEditorHeight] = useState(150);
   const [totalNodeHeight, setTotalNodeHeight] = useState(206); // Initial: 56 (header) + 150 (editor) + 8 (padding)
   const nodeData = data as FunctionNodeData;
@@ -136,6 +137,22 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
   const nodeRef = useRef<HTMLDivElement>(null);
 
   const lineHighlightedEdges = nodeData.lineHighlightedEdges || new Set();
+
+  // Đồng bộ trạng thái move-mode với ReactFlow (bật/tắt draggable của node)
+  useEffect(() => {
+    try {
+      window.postMessage(
+        {
+          command: "setNodeDraggable",
+          nodeId: nodeData.id,
+          draggable: isMoveMode,
+        },
+        "*"
+      );
+    } catch (e) {
+      console.error("[FunctionNode] Failed to post setNodeDraggable", e);
+    }
+  }, [isMoveMode, nodeData.id]);
 
   // Handle editor height changes
   const handleEditorHeightChange = useCallback(
@@ -330,9 +347,16 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
           isResizing ? "resizing" : ""
         } ${isNodeHighlighted ? "node-highlighted" : ""} ${
           lineHighlightedEdges.size > 0 ? "line-highlighted" : ""
-        }`}
+        } ${isMoveMode ? "move-mode" : ""}`}
         data-type="functionNode"
         onClick={handleNodeClick}
+        onMouseDown={(e) => {
+          // Ở chế độ đứng yên: chặn drag ReactFlow (cho phép chọn text trong editor)
+          if (!isMoveMode) e.stopPropagation();
+        }}
+        onPointerDown={(e) => {
+          if (!isMoveMode) e.stopPropagation();
+        }}
       >
         {/* Smart Handles - chỉ hiển thị handles có khả năng được sử dụng */}
         <Handle
@@ -445,6 +469,22 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
               💾 Saving...
             </span>
           )}
+          <button
+            className={`code-entity-node-move-toggle ${
+              isMoveMode ? "active" : ""
+            }`}
+            title={
+              isMoveMode
+                ? "Tắt chế độ di chuyển (trở về chế độ chọn code)"
+                : "Bật chế độ di chuyển (kéo node ở mọi vùng)"
+            }
+            onClick={(e) => {
+              e.stopPropagation(); // Không kích hoạt drag khi nhấn nút
+              setIsMoveMode((m) => !m);
+            }}
+          >
+            {isMoveMode ? "🖐️ Moving" : "⬍ Move"}
+          </button>
         </div>
 
         <div
@@ -457,15 +497,21 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
           }}
         >
           <div
-            className="code-entity-node-monaco-wrapper"
+            className="code-entity-node-monaco-wrapper nodrag"
             style={{ height: "100%" }}
+            onMouseDown={(e) => {
+              if (!isMoveMode) e.stopPropagation();
+            }}
+            onPointerDown={(e) => {
+              if (!isMoveMode) e.stopPropagation();
+            }}
           >
             <MonacoCodeEditor
               value={displayCode}
               onChange={handleCodeChange}
               language="go"
               height="100%"
-              readOnly={false}
+              readOnly={isMoveMode} // Move mode: khóa edit & selection (CSS sẽ chặn pointer-events)
               lineNumber={nodeData.line}
               onLineClick={handleLineClick}
               onEditorHeightChange={handleEditorHeightChange}

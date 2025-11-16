@@ -565,3 +565,87 @@
   transform: scale(1.1) !important;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3) !important;
 }
+
+/* ===================================
+   MOVE MODE TOGGLE (FunctionNode)
+   =================================== */
+
+.code-entity-node-move-toggle {
+  margin-left: 8px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(0,0,0,0.25);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all .2s ease;
+  letter-spacing: .5px;
+  backdrop-filter: blur(2px);
+}
+
+.code-entity-node-move-toggle:hover {
+  background: rgba(0,0,0,0.35);
+  transform: translateY(-1px);
+}
+
+.code-entity-node-move-toggle:active {
+  transform: translateY(0);
+}
+
+.code-entity-node-move-toggle.active {
+  background: linear-gradient(135deg,#6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+  border-color: rgba(255,255,255,0.4);
+  box-shadow: 0 0 0 2px rgba(99,102,241,0.4), 0 4px 12px rgba(99,102,241,0.4);
+  text-shadow: 0 0 6px rgba(255,255,255,0.4);
+}
+
+.code-entity-node-container.move-mode {
+  cursor: move;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.4), 0 12px 28px rgba(0,0,0,0.25);
+  transition: box-shadow .25s ease;
+}
+
+.code-entity-node-container.move-mode .monaco-editor,
+.code-entity-node-container.move-mode .monaco-editor .view-lines {
+  cursor: move !important;
+  user-select: none !important;
+}
+
+.code-entity-node-container.move-mode .monaco-editor .cursor {
+  opacity: 0.4;
+}
+
+.code-entity-node-container.move-mode::after {
+  content: "MOVE MODE";
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  background: rgba(99,102,241,0.25);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 4px;
+  pointer-events: none;
+  letter-spacing: .5px;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: all .25s ease;
+}
+
+.code-entity-node-container.move-mode:hover::after {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Disable text selection only in move-mode; default mode keeps selection enabled */
+.code-entity-node-container.move-mode .view-lines span,
+.code-entity-node-container.move-mode .view-lines div {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+}

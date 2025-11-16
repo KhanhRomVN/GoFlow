@@ -606,6 +606,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             id: node.id,
             type: "functionNode" as const,
             position: { x: 0, y: 0 },
+            draggable: false, // mặc định KHÔNG kéo, chỉ bật khi move-mode
             data: {
               id: node.id,
               label: node.label,
@@ -1180,6 +1181,15 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
       const message = event.data;
       try {
         switch (message.command) {
+          case "setNodeDraggable":
+            setNodes((curr) =>
+              curr.map((n) =>
+                n.id === message.nodeId
+                  ? { ...n, draggable: !!message.draggable }
+                  : n
+              )
+            );
+            break;
           case "renderGraph":
             setIsGraphReady(false);
             if (message.config) {
