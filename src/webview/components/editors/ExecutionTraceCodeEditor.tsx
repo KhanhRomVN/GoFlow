@@ -117,14 +117,14 @@ const ExecutionTraceCodeEditor: React.FC<ExecutionTraceCodeEditorProps> = ({
         typeof segmentEndLine === "number" &&
         segmentEndLine >= segmentStartLine
       ) {
-        // Highlight active segment lines WITH GREEN GUTTER + BACKGROUND
+        // Highlight active segment lines (skip line 1 - function declaration)
         for (let i = segmentStartLine; i < segmentEndLine; i++) {
+          if (i === 1) continue; // Skip function declaration line
           decorations.push({
             range: new monaco.Range(i, 1, i, 1),
             options: {
               isWholeLine: true,
               className: "active-segment-line-with-bg",
-              linesDecorationsClassName: "active-segment-gutter",
             },
           });
         }
@@ -134,7 +134,6 @@ const ExecutionTraceCodeEditor: React.FC<ExecutionTraceCodeEditorProps> = ({
           options: {
             isWholeLine: true,
             className: "function-call-line-with-bg",
-            linesDecorationsClassName: "function-call-gutter",
           },
         });
       } else if (
@@ -142,14 +141,14 @@ const ExecutionTraceCodeEditor: React.FC<ExecutionTraceCodeEditorProps> = ({
         legacyFadeFromLine >= 1 &&
         legacyFadeFromLine <= total
       ) {
-        // Legacy: highlight up to (EXCLUDING) call line WITH GREEN GUTTER + BACKGROUND
+        // Legacy: highlight up to (EXCLUDING) call line, skip line 1
         for (let i = 1; i < legacyFadeFromLine; i++) {
+          if (i === 1) continue; // Skip function declaration line
           decorations.push({
             range: new monaco.Range(i, 1, i, 1),
             options: {
               isWholeLine: true,
               className: "active-segment-line-with-bg",
-              linesDecorationsClassName: "active-segment-gutter",
             },
           });
         }
@@ -159,7 +158,6 @@ const ExecutionTraceCodeEditor: React.FC<ExecutionTraceCodeEditorProps> = ({
           options: {
             isWholeLine: true,
             className: "function-call-line-with-bg",
-            linesDecorationsClassName: "function-call-gutter",
           },
         });
       }
@@ -196,8 +194,7 @@ const ExecutionTraceCodeEditor: React.FC<ExecutionTraceCodeEditorProps> = ({
             String(lineNumber + editorLineNumber - 1),
           glyphMargin: false,
           folding: false,
-          // Increase gutter width so active segment gutter decoration shows on every highlighted line
-          lineDecorationsWidth: 10,
+          lineDecorationsWidth: 0,
           lineNumbersMinChars: 4,
           renderLineHighlight: "none",
           scrollbar: {

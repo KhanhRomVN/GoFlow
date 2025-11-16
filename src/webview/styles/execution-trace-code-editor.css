@@ -26,21 +26,6 @@
   filter: grayscale(0.4) brightness(0.85);
 }
 
-/* Active segment gutter highlight (XANH LÁ CÂY - RÌA TRONG) */
-.execution-trace-monaco-container .monaco-editor .active-segment-gutter {
-  background: rgba(16, 185, 129, 0.85) !important;
-  width: 4px !important;
-  margin-left: 0 !important;
-  border-left: 4px solid #10b981 !important;
-}
-
-.vs .execution-trace-monaco-container .monaco-editor .active-segment-gutter {
-  background: rgba(16, 185, 129, 0.75) !important;
-  width: 4px !important;
-  margin-left: 0 !important;
-  border-left: 4px solid #10b981 !important;
-}
-
 /* Active segment full-line highlight (non-call lines) - XANH NHẠT */
 .execution-trace-monaco-container .monaco-editor .active-segment-line-with-bg {
   background: linear-gradient(90deg, rgba(16,185,129,0.08), rgba(16,185,129,0.04)) !important;
@@ -57,21 +42,6 @@
 
 .vs .execution-trace-monaco-container .monaco-editor .function-call-line-with-bg {
   background: linear-gradient(90deg, rgba(239,68,68,0.28), rgba(239,68,68,0.16)) !important;
-}
-
-/* Function call gutter - ĐỎ (RÌA TRONG) */
-.execution-trace-monaco-container .monaco-editor .function-call-gutter {
-  background: rgba(239, 68, 68, 0.85) !important;
-  width: 4px !important;
-  margin-left: 0 !important;
-  border-left: 4px solid #ef4444 !important;
-}
-
-.vs .execution-trace-monaco-container .monaco-editor .function-call-gutter {
-  background: rgba(239, 68, 68, 0.75) !important;
-  width: 4px !important;
-  margin-left: 0 !important;
-  border-left: 4px solid #ef4444 !important;
 }
 
 /* Loading state */
