@@ -33,6 +33,8 @@ interface ExecutionTraceCodeEditorProps {
 }
 
 let monacoInitialized = false;
+// Share stable theme state across all trace editors to prevent flicker
+let currentMonacoTheme: string | undefined;
 
 const ExecutionTraceCodeEditor: React.FC<ExecutionTraceCodeEditorProps> = ({
   value,
@@ -66,26 +68,19 @@ const ExecutionTraceCodeEditor: React.FC<ExecutionTraceCodeEditorProps> = ({
   }, []);
 
   const handleMount = (editor: any, monaco: any) => {
-    // Theme selection (reuse logic from MonacoCodeEditor simplified)
-    let themeName = "vs-dark";
+    // FORCE DARK THEME - No brightness detection to avoid theme switching bugs
+    const themeName = "vs-dark";
+
     try {
-      const themeInfo = (window as any).__goflowTheme;
-      if (themeInfo && typeof themeInfo.isDark === "boolean") {
-        themeName = themeInfo.isDark ? "vs-dark" : "vs";
-      } else {
-        const bgColor = getComputedStyle(document.body)
-          .getPropertyValue("--vscode-editor-background")
-          .trim();
-        if (bgColor && bgColor.startsWith("#")) {
-          const r = parseInt(bgColor.slice(1, 3), 16);
-          const g = parseInt(bgColor.slice(3, 5), 16);
-          const b = parseInt(bgColor.slice(5, 7), 16);
-          const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-          themeName = brightness > 128 ? "vs" : "vs-dark";
-        }
+      if (currentMonacoTheme !== themeName) {
+        monaco.editor.setTheme(themeName);
+        currentMonacoTheme = themeName;
+        (window as any).__monacoAppliedTheme = themeName;
+        Logger.debug("[ExecutionTraceCodeEditor] Theme forced to vs-dark");
       }
-    } catch {}
-    monaco.editor.setTheme(themeName);
+    } catch (e) {
+      Logger.error("[ExecutionTraceCodeEditor] Failed to set theme", e);
+    }
 
     const model = editor.getModel();
     if (!model) return;

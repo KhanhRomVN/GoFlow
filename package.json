@@ -2,7 +2,7 @@
   "name": "goflow",
   "displayName": "GoFlow - Visual Go Code Navigator",
   "description": "Visualize Go code structure as interactive canvas with function calls and dependencies",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "khanhromvn",
   "license": "MIT",
   "repository": {

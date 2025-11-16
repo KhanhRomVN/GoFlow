@@ -135,9 +135,18 @@ interface FunctionNodeData extends Record<string, unknown> {
 }
 
 const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
+  const nodeData = data as FunctionNodeData;
+
   // Render counter
   try {
     fnRenderCount++;
+    Logger.debug(`[FunctionNode] RENDER #${fnRenderCount}`, {
+      nodeId: id,
+      type: nodeData.type,
+      label: nodeData.label,
+      isSelected: selected,
+      codeLength: nodeData.code?.length,
+    });
   } catch {}
 
   const [isSaving, setIsSaving] = useState(false);
@@ -145,7 +154,6 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
   const [isNodeHighlighted, setIsNodeHighlighted] = useState(false);
   const [editorHeight, setEditorHeight] = useState(150);
   const [totalNodeHeight, setTotalNodeHeight] = useState(206); // Initial: 56 (header) + 150 (editor) + 8 (padding)
-  const nodeData = data as FunctionNodeData;
 
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const nodeRef = useRef<HTMLDivElement>(null);
@@ -267,32 +275,57 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
 
   const handleLineClick = useCallback(
     (lineNumber: number, lineContent: string) => {
-      // LOG: gửi log về extension để debug line click + nội dung dòng
-      try {
-        nodeData.vscode?.postMessage({
-          command: "webviewLog",
-          level: "DEBUG",
-          message: "[FunctionNode] Line click",
-          data: {
-            nodeId: nodeData.id,
-            file: nodeData.file,
-            functionStartLine: nodeData.line,
-            clickedRelativeLine: lineNumber,
-            lineContent,
-            codeLength: nodeData.code?.split("\n").length,
-          },
-        });
-      } catch (e) {
-        console.error(
-          "[FunctionNode] Failed to send webviewLog for line click",
-          e
-        );
-      }
-
       fnLineClickCount++;
 
-      // Step 1: Resolve definition at clicked line (yellow line)
-      if (nodeData.vscode && nodeData.onHighlightEdge) {
+      const globalReady = !!(window as any).__goflowGraphReady;
+      const edgeArray = (window as any).__goflowEdges;
+      const edgeCount = Array.isArray(edgeArray) ? edgeArray.length : 0;
+      const globalNodes = (window as any).__goflowNodes || [];
+      const nodesReady = globalNodes.length > 0;
+
+      const thisNodeExists = globalNodes.some((n: any) => n.id === nodeData.id);
+      const effectiveReady =
+        globalReady && edgeCount > 0 && nodesReady && thisNodeExists;
+
+      Logger.debug(`[FunctionNode] Line click handled`, {
+        nodeId: nodeData.id,
+        lineNumber,
+        lineContent: lineContent.substring(0, 50),
+        globalReady,
+        edgeCount,
+        nodesReady: globalNodes.length,
+        thisNodeExists,
+        effectiveReady,
+        lineClickCount: fnLineClickCount,
+        sessionId: (window as any).__goflowSessionId,
+      });
+
+      if (!effectiveReady) {
+        Logger.warn(`[FunctionNode] Graph not ready - QUEUING actions`, {
+          nodeId: nodeData.id,
+          effectiveReady,
+          missingComponents: {
+            globalReady: !globalReady,
+            edges: edgeCount === 0,
+            nodes: !nodesReady,
+            thisNode: !thisNodeExists,
+          },
+        });
+
+        (window as any).__goflowPendingLineClick = {
+          nodeId: nodeData.id,
+          file: nodeData.file,
+          functionStartLine: nodeData.line,
+          lineNumber,
+          lineContent,
+          timestamp: Date.now(),
+        };
+        (window as any).__goflowPendingNodeHighlight = nodeData.id;
+        return;
+      }
+
+      // Step 1: Resolve definition
+      if (nodeData.vscode) {
         nodeData.vscode.postMessage({
           command: "resolveDefinitionAtLine",
           file: nodeData.file,
@@ -300,21 +333,17 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
           relativeLine: lineNumber,
           lineContent: lineContent,
           nodeId: nodeData.id,
-          shouldTracePath: false, // Không trace path ở đây
+          shouldTracePath: false,
         });
       }
 
-      // Step 2: Highlight parent nodes (red lines)
+      // Step 2: Highlight parent nodes
       if (typeof nodeData.onNodeHighlight === "function") {
         nodeData.onNodeHighlight(nodeData.id);
         setIsNodeHighlighted(true);
-      } else {
-        Logger.warn(
-          `[FunctionNode] onNodeHighlight is not a function for: ${nodeData.id}`
-        );
       }
     },
-    [nodeData]
+    [nodeData] // Không cần nodes.length vì dùng window global
   );
 
   const handleNodeClick = useCallback(
@@ -490,6 +519,14 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
           {isSaving && (
             <span className="code-entity-node-saving-indicator">
               💾 Saving...
+            </span>
+          )}
+          {(window as any).__goflowPendingLineClick?.nodeId === nodeData.id && (
+            <span
+              className="code-entity-node-queued-indicator"
+              title="Action queued - graph loading"
+            >
+              ⏳ Queued
             </span>
           )}
         </div>

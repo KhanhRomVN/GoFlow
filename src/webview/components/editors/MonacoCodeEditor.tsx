@@ -23,16 +23,16 @@ interface MonacoCodeEditorProps {
   onEditorHeightChange?: (height: number) => void;
   nodeId?: string;
   allEdges?: any[];
-  fadeFromLine?: number; // LEGACY: keep for backward compatibility
-  segmentStartLine?: number; // NEW: first bright line (relative)
-  segmentEndLine?: number; // NEW: last bright line (relative)
+  fadeFromLine?: number;
+  segmentStartLine?: number;
+  segmentEndLine?: number;
 }
 
 // Biến toàn cục để theo dõi trạng thái khởi tạo
 let monacoInitialized = false;
 let currentMonacoTheme: string | undefined;
 
-// DEBUG INSTRUMENTATION
+// DEBUG INSTRUMENTATION - Enhanced counters
 let monacoRenderCount = 0;
 let monacoMountCount = 0;
 let monacoThemeSetCount = 0;
@@ -52,22 +52,37 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   fadeFromLine,
   segmentStartLine,
   segmentEndLine,
+  nodeId,
 }) => {
   const [isEditorReady, setIsEditorReady] = useState(false);
 
   // Render counter instrumentation
   try {
     monacoRenderCount++;
+    Logger.debug(`[MonacoCodeEditor] RENDER #${monacoRenderCount}`, {
+      nodeId,
+      valueLength: value?.length,
+      language,
+      isEditorReady,
+      monacoInitialized,
+    });
   } catch {}
 
   useEffect(() => {
-    // Chỉ khởi tạo Monaco một lần duy nhất
+    Logger.debug(`[MonacoCodeEditor] useEffect triggered`, {
+      nodeId,
+      monacoInitialized,
+      isEditorReady,
+    });
+
     if (monacoInitialized) {
       setIsEditorReady(true);
+      Logger.debug(`[MonacoCodeEditor] Monaco already initialized`, { nodeId });
       return;
     }
 
-    // Configure Monaco to load from local media/vs folder
+    Logger.debug(`[MonacoCodeEditor] Initializing Monaco...`, { nodeId });
+
     try {
       loader.config({
         paths: {
@@ -83,81 +98,164 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
         .then(() => {
           monacoInitialized = true;
           setIsEditorReady(true);
+          Logger.debug(`[MonacoCodeEditor] Monaco init SUCCESS`, { nodeId });
         })
         .catch((err) => {
-          console.error("[MonacoCodeEditor] Failed to initialize Monaco:", err);
-          console.error("[MonacoCodeEditor] Stack:", err?.stack);
+          Logger.error(`[MonacoCodeEditor] Monaco init FAILED:`, {
+            nodeId,
+            error: err instanceof Error ? err.message : String(err),
+            stack: err instanceof Error ? err.stack : undefined,
+          });
         });
     } catch (err) {
-      console.error("[MonacoCodeEditor] Exception during Monaco config:", err);
+      Logger.error(`[MonacoCodeEditor] Monaco config EXCEPTION:`, {
+        nodeId,
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      });
     }
   }, []);
 
   const handleEditorDidMount = (editor: any, monaco: any) => {
     monacoMountCount++;
+    Logger.debug(`[MonacoCodeEditor] MOUNT #${monacoMountCount}`, {
+      nodeId,
+      editorId: editor.getId?.(),
+      modelUri: editor.getModel()?.uri?.toString?.(),
+      lineCount: editor.getModel()?.getLineCount?.(),
+    });
+
     // Listen to cursor position changes
     if (onLineClick) {
+      let cursorIntentTimeout: any = null;
       editor.onDidChangeCursorPosition((e: any) => {
-        const absoluteLine = e.position.lineNumber; // displayed (file) line
-        const relativeLine = absoluteLine - lineNumber + 1; // convert to 1-based inside function
-        if (relativeLine < 1) {
-          return; // safety
+        if (e.source !== "mouse" && e.reason !== 3) {
+          return;
         }
-        const model = editor.getModel();
-        const lineContent =
-          model?.getLineContent(relativeLine) ||
-          model?.getLineContent(absoluteLine) ||
-          "";
-        onLineClick(relativeLine, lineContent);
+
+        try {
+          const selection = editor.getSelection();
+          if (!selection) return;
+
+          const hasActiveSelection =
+            selection.startLineNumber !== selection.endLineNumber ||
+            selection.startColumn !== selection.endColumn;
+
+          if (hasActiveSelection) {
+            Logger.debug(
+              `[MonacoCodeEditor] Skipping - active text selection`,
+              {
+                nodeId,
+                selection: {
+                  start: `${selection.startLineNumber}:${selection.startColumn}`,
+                  end: `${selection.endLineNumber}:${selection.endColumn}`,
+                },
+              }
+            );
+            return;
+          }
+        } catch (selErr) {
+          Logger.warn(`[MonacoCodeEditor] Selection check failed`, {
+            nodeId,
+            error: selErr instanceof Error ? selErr.message : String(selErr),
+          });
+          return;
+        }
+
+        // Debounce rapid cursor moves
+        if (cursorIntentTimeout) {
+          clearTimeout(cursorIntentTimeout);
+        }
+        cursorIntentTimeout = setTimeout(() => {
+          const isReady = (window as any).__goflowEffectiveGraphReady;
+          const globalEdges = (window as any).__goflowEdges || [];
+          const globalNodes = (window as any).__goflowNodes || [];
+
+          Logger.debug(`[MonacoCodeEditor] Processing line click`, {
+            nodeId,
+            isReady,
+            globalEdgeCount: globalEdges.length,
+            globalNodeCount: globalNodes.length,
+            sessionId: (window as any).__goflowSessionId,
+          });
+
+          if (!isReady) {
+            Logger.debug(
+              `[MonacoEditor] Graph not ready - queuing line click`,
+              {
+                nodeId,
+                pendingLineClick: !!(window as any).__goflowPendingLineClick,
+                pendingNodeHighlight: (window as any)
+                  .__goflowPendingNodeHighlight,
+              }
+            );
+            return;
+          }
+
+          const absoluteLine = e.position.lineNumber;
+          const relativeLine = absoluteLine - lineNumber + 1;
+
+          if (relativeLine < 1) {
+            Logger.warn(`[MonacoEditor] Invalid relative line`, {
+              nodeId,
+              absoluteLine,
+              lineNumber,
+              relativeLine,
+            });
+            return;
+          }
+
+          const model = editor.getModel();
+          const lineContent =
+            model?.getLineContent(relativeLine) ||
+            model?.getLineContent(absoluteLine) ||
+            "";
+
+          Logger.debug(`[MonacoEditor] Triggering line click`, {
+            nodeId,
+            absoluteLine,
+            relativeLine,
+            lineContent: lineContent.substring(0, 100), // First 100 chars
+          });
+
+          onLineClick(relativeLine, lineContent);
+        }, 150);
       });
     }
 
-    // Get theme from VSCode API directly
-    let themeName = "vs-dark"; // Default to dark theme
+    // FORCE DARK THEME - No brightness detection to avoid theme switching bugs
+    const themeName = "vs-dark";
 
-    let detectedBgColor: string | undefined;
-    let detectedBrightness: number | undefined;
-
-    try {
-      // Try to get theme from window object first
-      const themeInfo = (window as any).__goflowTheme;
-
-      if (themeInfo && typeof themeInfo.isDark === "boolean") {
-        themeName = themeInfo.isDark ? "vs-dark" : "vs";
-      } else {
-        // Fallback: detect from CSS variables
-        const bgColor = getComputedStyle(document.body)
-          .getPropertyValue("--vscode-editor-background")
-          .trim();
-        detectedBgColor = bgColor;
-
-        // If background is light-colored, use light theme
-        if (bgColor && bgColor.startsWith("#")) {
-          const r = parseInt(bgColor.slice(1, 3), 16);
-          const g = parseInt(bgColor.slice(3, 5), 16);
-          const b = parseInt(bgColor.slice(5, 7), 16);
-          const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-          detectedBrightness = brightness;
-          themeName = brightness > 128 ? "vs" : "vs-dark";
-        }
-      }
-    } catch (err) {
-      Logger.error("[MonacoCodeEditor] Error detecting theme:", err);
-    }
-
-    // Apply theme only if different to prevent unnecessary reflows/flicker
     try {
       if (currentMonacoTheme !== themeName) {
         monacoThemeSetCount++;
         monaco.editor.setTheme(themeName);
         currentMonacoTheme = themeName;
         (window as any).__monacoAppliedTheme = themeName;
+        Logger.debug(`[MonacoCodeEditor] Theme SET to ${themeName}`, {
+          nodeId,
+          themeSetCount: monacoThemeSetCount,
+        });
       } else {
         monacoThemeSkipCount++;
+        if (monacoThemeSkipCount % 10 === 0) {
+          // Log every 10th skip to reduce noise
+          Logger.debug(
+            `[MonacoCodeEditor] Theme SKIPPED (already ${themeName})`,
+            {
+              nodeId,
+              themeSkipCount: monacoThemeSkipCount,
+            }
+          );
+        }
       }
     } catch (e) {
-      Logger.error("[MonacoCodeEditor] Failed to set theme", e);
+      Logger.error(`[MonacoCodeEditor] Theme setup FAILED`, {
+        nodeId,
+        error: e instanceof Error ? e.message : String(e),
+      });
     }
+
     // Stable decoration ID holders to prevent flicker during text selection caused by full decoration flushes.
     // Using previous IDs lets Monaco diff decorations incrementally instead of clearing/repainting everything.
     let functionCallDecorationIds: string[] = [];
@@ -166,7 +264,16 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
     // Apply decorations for function call lines (stable diff to avoid flicker)
     const applyFunctionCallDecorations = () => {
       const model = editor.getModel();
-      if (!model) return;
+      if (!model) {
+        Logger.warn(`[MonacoCodeEditor] No model for decorations`, { nodeId });
+        return;
+      }
+
+      Logger.debug(`[MonacoCodeEditor] Applying function call decorations`, {
+        nodeId,
+        lineCount: model.getLineCount(),
+        previousDecorationCount: functionCallDecorationIds.length,
+      });
 
       const newDecorations: any[] = [];
       const functionCallRegex = /\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
@@ -238,6 +345,13 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
         newDecorations
       );
       monacoFunctionDecoApplyCount++;
+
+      Logger.debug(`[MonacoCodeEditor] Function decorations applied`, {
+        nodeId,
+        newDecorationCount: newDecorations.length,
+        totalDecorationCount: functionCallDecorationIds.length,
+        applyCount: monacoFunctionDecoApplyCount,
+      });
     };
 
     // Helper function to detect return value usage
