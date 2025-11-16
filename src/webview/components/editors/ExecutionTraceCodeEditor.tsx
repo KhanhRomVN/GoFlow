@@ -117,6 +117,16 @@ const ExecutionTraceCodeEditor: React.FC<ExecutionTraceCodeEditorProps> = ({
         typeof segmentEndLine === "number" &&
         segmentEndLine >= segmentStartLine
       ) {
+        // Dim lines before active segment
+        for (let i = 1; i < segmentStartLine; i++) {
+          decorations.push({
+            range: new monaco.Range(i, 1, i, 1),
+            options: {
+              isWholeLine: true,
+              className: "execution-fade-line",
+            },
+          });
+        }
         // Highlight active segment lines (skip line 1 - function declaration)
         for (let i = segmentStartLine; i < segmentEndLine; i++) {
           if (i === 1) continue; // Skip function declaration line
@@ -136,6 +146,16 @@ const ExecutionTraceCodeEditor: React.FC<ExecutionTraceCodeEditorProps> = ({
             className: "function-call-line-with-bg",
           },
         });
+        // Dim lines after call line
+        for (let i = segmentEndLine + 1; i <= total; i++) {
+          decorations.push({
+            range: new monaco.Range(i, 1, i, 1),
+            options: {
+              isWholeLine: true,
+              className: "execution-fade-line",
+            },
+          });
+        }
       } else if (
         typeof legacyFadeFromLine === "number" &&
         legacyFadeFromLine >= 1 &&
@@ -160,6 +180,16 @@ const ExecutionTraceCodeEditor: React.FC<ExecutionTraceCodeEditorProps> = ({
             className: "function-call-line-with-bg",
           },
         });
+        // Dim lines after call line
+        for (let i = legacyFadeFromLine + 1; i <= total; i++) {
+          decorations.push({
+            range: new monaco.Range(i, 1, i, 1),
+            options: {
+              isWholeLine: true,
+              className: "execution-fade-line",
+            },
+          });
+        }
       }
 
       editor.deltaDecorations([], decorations);

@@ -11,19 +11,27 @@
   background: var(--vscode-editor-background);
 }
 
-/* Execution Fade (Dimmed Lines) */
+/* Execution Fade (Dimmed Lines) - Apply filter to entire line */
 .execution-trace-monaco-container .monaco-editor .execution-fade-line {
-  /* Dark theme: make dimmed lines noticeably darker */
-  background: linear-gradient(90deg, rgba(0,0,0,0.55), rgba(0,0,0,0.35)) !important;
-  opacity: 0.75;
-  filter: grayscale(0.7) brightness(0.55);
+  /* Dark theme: use filter and opacity to dim */
+  opacity: 0.35 !important;
+  filter: grayscale(0.5) !important;
+}
+
+.execution-trace-monaco-container .monaco-editor .execution-fade-line * {
+  /* Apply to all child elements including text spans */
+  opacity: 0.5 !important;
 }
 
 .vs .execution-trace-monaco-container .monaco-editor .execution-fade-line {
-  /* Light theme: use stronger light gray overlay to reduce brightness */
-  background: linear-gradient(90deg, rgba(0,0,0,0.15), rgba(0,0,0,0.08)) !important;
-  opacity: 0.65;
-  filter: grayscale(0.4) brightness(0.85);
+  /* Light theme: use filter and opacity to dim */
+  opacity: 0.45 !important;
+  filter: grayscale(0.4) !important;
+}
+
+.vs .execution-trace-monaco-container .monaco-editor .execution-fade-line * {
+  /* Apply to all child elements including text spans */
+  opacity: 0.6 !important;
 }
 
 /* Active segment full-line highlight (non-call lines) - XANH NHẠT */
