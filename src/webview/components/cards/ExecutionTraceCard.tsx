@@ -10,7 +10,6 @@ import ExecutionTraceCodeEditor from "../editors/ExecutionTraceCodeEditor";
  *  - Relative call line highlighting inside source function for 'call' entries
  *  - Fading future lines after call line
  *  - Basic badge styling
- * Provides internal diagnostics for mismatches (console.debug)
  */
 interface ExecutionTraceCardProps {
   entry: ExecutionTraceEntry;
@@ -60,19 +59,6 @@ const ExecutionTraceCard: React.FC<ExecutionTraceCardProps> = ({
       const absolute = baseStartLine + callLineRelative - 1;
       // If codeToRender length shorter than relative call line
       const lineCount = (codeToRender || "").split("\n").length;
-      if (callLineRelative > lineCount) {
-        console.debug(
-          "[ExecutionTraceCard][Mismatch] Relative call line exceeds code length",
-          {
-            sourceNodeId: entry.sourceNodeId,
-            targetNodeId: entry.targetNodeId,
-            callLineRelative,
-            lineCount,
-            baseStartLine,
-            absoluteCallLine: absolute,
-          }
-        );
-      }
     }
   }, [entry, callLineRelative, baseStartLine, codeToRender]);
 

@@ -58,16 +58,6 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   // Render counter instrumentation
   try {
     monacoRenderCount++;
-    Logger.debug("[MonacoCodeEditor][Render] Component render", {
-      renderCount: monacoRenderCount,
-      valueLength: value?.length,
-      language,
-      readOnly,
-      lineNumber,
-      hasFadeFromLine: typeof fadeFromLine === "number",
-      segmentStartLine,
-      segmentEndLine,
-    });
   } catch {}
 
   useEffect(() => {
@@ -105,14 +95,6 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
 
   const handleEditorDidMount = (editor: any, monaco: any) => {
     monacoMountCount++;
-    try {
-      Logger.debug("[MonacoCodeEditor][Mount] Editor mounted", {
-        mountCount: monacoMountCount,
-        currentMonacoTheme,
-        appliedThemeGlobal: (window as any).__monacoAppliedTheme,
-      });
-    } catch {}
-
     // Listen to cursor position changes
     if (onLineClick) {
       editor.onDidChangeCursorPosition((e: any) => {
@@ -126,15 +108,6 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
           model?.getLineContent(relativeLine) ||
           model?.getLineContent(absoluteLine) ||
           "";
-        // DEBUG log (webview console only)
-        try {
-          Logger.debug("[MonacoCodeEditor] Cursor line change", {
-            nodeStartLine: lineNumber,
-            absoluteLine,
-            relativeLine,
-            extractedContentSample: lineContent.slice(0, 80),
-          });
-        } catch {}
         onLineClick(relativeLine, lineContent);
       });
     }
@@ -176,31 +149,11 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
     try {
       if (currentMonacoTheme !== themeName) {
         monacoThemeSetCount++;
-        Logger.debug("[MonacoCodeEditor][Theme] Applying theme", {
-          previous: currentMonacoTheme,
-          next: themeName,
-          mountCount: monacoMountCount,
-          renderCount: monacoRenderCount,
-          themeSetCount: monacoThemeSetCount,
-          themeSkipCount: monacoThemeSkipCount,
-          detectedBgColor,
-          detectedBrightness,
-          rawThemeInfo: (window as any).__goflowTheme,
-        });
         monaco.editor.setTheme(themeName);
         currentMonacoTheme = themeName;
         (window as any).__monacoAppliedTheme = themeName;
       } else {
         monacoThemeSkipCount++;
-        Logger.debug("[MonacoCodeEditor][Theme] Unchanged - skip setTheme", {
-          themeName,
-          mountCount: monacoMountCount,
-          renderCount: monacoRenderCount,
-          themeSetCount: monacoThemeSetCount,
-          themeSkipCount: monacoThemeSkipCount,
-          detectedBgColor,
-          detectedBrightness,
-        });
       }
     } catch (e) {
       Logger.error("[MonacoCodeEditor] Failed to set theme", e);
@@ -285,13 +238,6 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
         newDecorations
       );
       monacoFunctionDecoApplyCount++;
-      try {
-        Logger.debug("[MonacoCodeEditor][Decorations] Function calls applied", {
-          count: newDecorations.length,
-          applyCount: monacoFunctionDecoApplyCount,
-          modelLineCount: model.getLineCount(),
-        });
-      } catch {}
     };
 
     // Helper function to detect return value usage
@@ -448,15 +394,6 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
         newDecorations
       );
       monacoSegmentDecoApplyCount++;
-      try {
-        Logger.debug("[MonacoCodeEditor][Decorations] Segment fade applied", {
-          count: newDecorations.length,
-          applyCount: monacoSegmentDecoApplyCount,
-          segmentStartLine,
-          segmentEndLine,
-          fadeFromLine,
-        });
-      } catch {}
     };
 
     applySegmentFadeDecorations();
@@ -465,14 +402,6 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
     editor.onDidChangeModelContent(() => {
       applyFunctionCallDecorations();
       applySegmentFadeDecorations();
-      try {
-        Logger.debug("[MonacoCodeEditor][ModelContent] Content changed", {
-          mountCount: monacoMountCount,
-          renderCount: monacoRenderCount,
-          functionDecoApplyCount: monacoFunctionDecoApplyCount,
-          segmentDecoApplyCount: monacoSegmentDecoApplyCount,
-        });
-      } catch {}
     });
 
     // Set line number offset if needed

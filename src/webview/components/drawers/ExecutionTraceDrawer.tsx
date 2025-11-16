@@ -130,10 +130,6 @@ const ExecutionTraceDrawer: React.FC<ExecutionTraceDrawerProps> = ({
           );
         if (!priorCall) {
           unmatchedReturns++;
-          console.debug(
-            "[ExecutionTraceDrawer][Diag] Return without matching prior call",
-            entry
-          );
         }
       }
       if (
@@ -144,31 +140,8 @@ const ExecutionTraceDrawer: React.FC<ExecutionTraceDrawerProps> = ({
         const absLine = entry.sourceStartLine + entry.sourceCallLine - 1;
         if (!entry.sourceLineContent) {
           callsMissingContent++;
-          console.debug(
-            "[ExecutionTraceDrawer][Diag] Missing sourceLineContent for call",
-            {
-              sourceNodeId: entry.sourceNodeId,
-              targetNodeId: entry.targetNodeId,
-              sourceCallLine: entry.sourceCallLine,
-              sourceStartLine: entry.sourceStartLine,
-              absoluteCallLine: absLine,
-            }
-          );
         }
       }
-    });
-
-    // Aggregate summary (helps compare with Canvas flow correctness)
-    console.debug("[ExecutionTraceDrawer][DiagSummary]", {
-      totalEntries: orderedEntries.length,
-      callCount: orderedEntries.filter((e) => e.type === "call").length,
-      returnCount: orderedEntries.filter((e) => e.type === "return").length,
-      unresolvedCount: orderedEntries.filter((e) => e.type === "unresolved")
-        .length,
-      rawCount: orderedEntries.filter((e) => e.type === "raw").length,
-      unmatchedReturns,
-      callsMissingContent,
-      hasRootEntry: !!rootEntry,
     });
   }, [orderedEntries, rootEntry]);
 

@@ -138,11 +138,6 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
   // Render counter
   try {
     fnRenderCount++;
-    Logger.debug("[FunctionNode][Render]", {
-      id,
-      renderCount: fnRenderCount,
-      selected,
-    });
   } catch {}
 
   const [isSaving, setIsSaving] = useState(false);
@@ -152,17 +147,6 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
   const [totalNodeHeight, setTotalNodeHeight] = useState(206); // Initial: 56 (header) + 150 (editor) + 8 (padding)
   const nodeData = data as FunctionNodeData;
 
-  // Mount effect
-  useEffect(() => {
-    fnMountCount++;
-    try {
-      Logger.debug("[FunctionNode][Mount]", {
-        id: nodeData.id,
-        mountCount: fnMountCount,
-        codeLength: nodeData.code?.length,
-      });
-    } catch {}
-  }, []);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const nodeRef = useRef<HTMLDivElement>(null);
 
@@ -189,13 +173,6 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
     (height: number) => {
       setEditorHeight(height);
       fnHeightChangeCount++;
-      try {
-        Logger.debug("[FunctionNode][EditorHeightChange]", {
-          id: nodeData.id,
-          newHeight: height,
-          heightChangeCount: fnHeightChangeCount,
-        });
-      } catch {}
 
       // Calculate new total node height
       const newTotalHeight = 56 + height + 8; // header (56) + editor + padding (8)
@@ -247,13 +224,6 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
       }
 
       fnSaveScheduleCount++;
-      try {
-        Logger.debug("[FunctionNode][SaveScheduled]", {
-          id: nodeData.id,
-          pendingDelayMs: 1500,
-          saveScheduleCount: fnSaveScheduleCount,
-        });
-      } catch {}
 
       saveTimeoutRef.current = setTimeout(async () => {
         if (!nodeData.vscode) {
@@ -265,13 +235,6 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
 
         try {
           fnSaveExecCount++;
-          try {
-            Logger.debug("[FunctionNode][SaveExec]", {
-              id: nodeData.id,
-              saveExecCount: fnSaveExecCount,
-              codeLength: value.length,
-            });
-          } catch {}
 
           nodeData.vscode.postMessage({
             command: "saveCode",
@@ -327,13 +290,6 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
       }
 
       fnLineClickCount++;
-      try {
-        Logger.debug("[FunctionNode][LineClick]", {
-          id: nodeData.id,
-          relativeLine: lineNumber,
-          lineClickCount: fnLineClickCount,
-        });
-      } catch {}
 
       // Step 1: Resolve definition at clicked line (yellow line)
       if (nodeData.vscode && nodeData.onHighlightEdge) {
@@ -375,24 +331,10 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
           nodeData.onClearNodeHighlight();
           setIsNodeHighlighted(false);
           fnNodeClickToggleCount++;
-          try {
-            Logger.debug("[FunctionNode][NodeClickToggle]", {
-              id: nodeData.id,
-              toggledTo: false,
-              toggleCount: fnNodeClickToggleCount,
-            });
-          } catch {}
         } else {
           nodeData.onNodeHighlight(nodeData.id);
           setIsNodeHighlighted(true);
           fnNodeClickToggleCount++;
-          try {
-            Logger.debug("[FunctionNode][NodeClickToggle]", {
-              id: nodeData.id,
-              toggledTo: true,
-              toggleCount: fnNodeClickToggleCount,
-            });
-          } catch {}
         }
       }
     },
