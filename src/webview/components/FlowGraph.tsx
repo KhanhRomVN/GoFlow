@@ -16,11 +16,10 @@ import "../styles/common.css";
 import "../styles/flow-graph.css";
 import FunctionNode from "./nodes/FunctionNode";
 import FileGroupContainer from "./containers/FileGroupContainer";
-import { GraphData } from "../../models/Node";
-import { detectFramework, FrameworkConfig } from "../configs/layoutStrategies";
+import { FrameworkConfig } from "../configs/layoutStrategies";
 import {
-  getLayoutedElements,
   calculateFileGroupContainers,
+  getLayoutedElements,
 } from "../utils/graphLayout";
 import { EdgeTracker } from "../utils/EdgeTracker";
 import { Logger } from "../../utils/webviewLogger";
@@ -29,8 +28,11 @@ import DeclarationNode from "./nodes/DeclarationNode";
 import CallOrderEdge from "./edges/CallOrderEdge";
 import ExecutionTraceDrawer from "./drawers/ExecutionTraceDrawer";
 import useDebounce from "../hooks/useDebounce";
-import convertToFlowDataExternal from "../utils/flowConversion";
 import useExecutionTrace from "../hooks/useExecutionTrace";
+import useGraphHighlighting from "../hooks/useGraphHighlighting";
+import FlowGraphToolbar from "./toolbar/FlowGraphToolbar";
+import useRenderGraph from "../hooks/useRenderGraph";
+import useMessageBridge from "../hooks/useMessageBridge";
 
 import type {
   FunctionNodeData,
@@ -62,19 +64,24 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
   const [currentFileName, setCurrentFileName] = useState<string>("");
   const [isAutoSorting, setIsAutoSorting] = useState(false);
 
-  const [lineHighlightedEdges, setLineHighlightedEdges] = useState<Set<string>>(
-    new Set()
-  );
-  const [nodeHighlightedEdges, setNodeHighlightedEdges] = useState<Set<string>>(
-    new Set()
-  );
-  const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(
-    null
-  );
+  const [isGraphReady, setIsGraphReady] = useState(false);
+  const {
+    lineHighlightedEdges,
+    handleHighlightEdge,
+    handleClearHighlight,
+    handleNodeHighlight,
+    handleClearNodeHighlight,
+  } = useGraphHighlighting({
+    edges,
+    nodes,
+    setEdges,
+    setNodes,
+    isGraphReady,
+    vscode,
+  });
   const [pendingHighlightNodeId, setPendingHighlightNodeId] = useState<
     string | null
   >(null);
-  const [isGraphReady, setIsGraphReady] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -168,17 +175,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     }
   }, [hiddenNodeIds]);
 
-  const getOriginalDashArray = useCallback(
-    (edge: FlowEdge): string | undefined => {
-      if (edge.style?.strokeDasharray)
-        return edge.style.strokeDasharray as string;
-      if (edge.data?.dashed === true) return "8 4";
-      if (edge.data?.hasReturnValue === false) return "8 4";
-      return undefined;
-    },
-    []
-  );
-
   const handleToggleDrawer = useCallback(
     () => setIsDrawerOpen((prev) => !prev),
     []
@@ -200,327 +196,9 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     );
   }, [nodes]);
 
-  const handleHighlightEdge = useCallback(
-    (sourceNodeId: string, targetNodeId: string) => {
-      const edgeKey = `${sourceNodeId}->${targetNodeId}`;
-      setLineHighlightedEdges(new Set([edgeKey]));
-      setEdges((current) =>
-        current.map((edge) => {
-          const currentKey = `${edge.source}->${edge.target}`;
-          const isLineHighlighted = currentKey === edgeKey;
-          const isNodeHighlighted = nodeHighlightedEdges.has(currentKey);
-          const originalDashArray = getOriginalDashArray(edge);
-
-          if (isLineHighlighted) {
-            return {
-              ...edge,
-              animated: true,
-              style: {
-                ...edge.style,
-                stroke: "#FFC107",
-                strokeWidth: 4,
-                strokeDasharray: originalDashArray,
-              },
-              zIndex: 1000,
-            };
-          }
-          if (isNodeHighlighted) {
-            return {
-              ...edge,
-              animated: true,
-              style: {
-                ...edge.style,
-                stroke: "#FF6B6B",
-                strokeWidth: 3,
-                strokeDasharray: originalDashArray,
-              },
-              zIndex: 999,
-            };
-          }
-          return {
-            ...edge,
-            animated: false,
-            style: {
-              ...edge.style,
-              stroke: "#666",
-              strokeWidth: 2,
-              strokeDasharray: originalDashArray,
-            },
-            zIndex: 1,
-          };
-        })
-      );
-    },
-    [nodeHighlightedEdges, getOriginalDashArray, setEdges]
-  );
-
-  const handleClearHighlight = useCallback(() => {
-    setLineHighlightedEdges(new Set());
-    setEdges((current) =>
-      current.map((edge) => {
-        const currentKey = `${edge.source}->${edge.target}`;
-        const isNodeHighlighted = nodeHighlightedEdges.has(currentKey);
-        const originalDashArray = getOriginalDashArray(edge);
-        if (isNodeHighlighted) {
-          return {
-            ...edge,
-            animated: true,
-            style: {
-              ...edge.style,
-              stroke: "#FF6B6B",
-              strokeWidth: 3,
-              strokeDasharray: originalDashArray,
-            },
-            zIndex: 999,
-          };
-        }
-        return {
-          ...edge,
-          animated: false,
-          style: {
-            ...edge.style,
-            stroke: "#666",
-            strokeWidth: 2,
-            strokeDasharray: originalDashArray,
-          },
-          zIndex: 1,
-        };
-      })
-    );
-  }, [nodeHighlightedEdges, getOriginalDashArray, setEdges]);
-
-  const handleNodeHighlight = useCallback(
-    (targetNodeId: string) => {
-      if (!isGraphReady || edges.length === 0 || nodes.length === 0) {
-        const globalSession = (window as any).__goflowSessionId;
-        const canUseBuffered =
-          midReloadRef.current &&
-          (window as any).__goflowPrevSessionBuffered &&
-          Array.isArray(prevNodesRef.current) &&
-          prevNodesRef.current.length > 0 &&
-          Array.isArray(prevEdgesRef.current) &&
-          prevEdgesRef.current.length > 0;
-
-        if (canUseBuffered) {
-          Logger.debug(
-            `[FlowGraph] Mid-reload highlight using buffered previous graph for ${targetNodeId}. bufferedNodes=${prevNodesRef.current.length} bufferedEdges=${prevEdgesRef.current.length} session=${currentSessionIdRef.current} globalSession=${globalSession}`
-          );
-
-          const bufferedIncoming = prevEdgesRef.current.filter(
-            (e) => e.target === targetNodeId
-          );
-          const edgeKeys = new Set(
-            bufferedIncoming.map((e) => `${e.source}->${e.target}`)
-          );
-          setNodeHighlightedEdges(edgeKeys);
-          setHighlightedNodeId(targetNodeId);
-
-          setEdges((current) =>
-            current.map((edge) => {
-              const currentKey = `${edge.source}->${edge.target}`;
-              const isLineHighlighted = lineHighlightedEdges.has(currentKey);
-              const isNodeHighlighted = edgeKeys.has(currentKey);
-              const originalDashArray = getOriginalDashArray(edge);
-
-              if (isLineHighlighted) {
-                return {
-                  ...edge,
-                  animated: true,
-                  style: {
-                    ...edge.style,
-                    stroke: "#FFC107",
-                    strokeWidth: 4,
-                    strokeDasharray: originalDashArray,
-                  },
-                  zIndex: 1000,
-                };
-              }
-              if (isNodeHighlighted) {
-                return {
-                  ...edge,
-                  animated: true,
-                  style: {
-                    ...edge.style,
-                    stroke: "#FF6B6B",
-                    strokeWidth: 3,
-                    strokeDasharray: originalDashArray,
-                  },
-                  zIndex: 999,
-                };
-              }
-              return {
-                ...edge,
-                animated: false,
-                style: {
-                  ...edge.style,
-                  stroke: "#666",
-                  strokeWidth: 2,
-                  strokeDasharray: originalDashArray,
-                },
-                zIndex: 1,
-              };
-            })
-          );
-
-          setNodes((currentNodes) =>
-            currentNodes.map((node) => {
-              const isParent = bufferedIncoming.some(
-                (e) => e.source === node.id
-              );
-              const isTarget = node.id === targetNodeId;
-              if (isParent || isTarget) {
-                return {
-                  ...node,
-                  style: {
-                    ...node.style,
-                    border: isTarget
-                      ? "3px solid #FF6B6B"
-                      : "2px solid #FFA500",
-                    boxShadow: isTarget
-                      ? "0 0 10px rgba(255,107,107,0.5)"
-                      : "0 0 8px rgba(255,165,0,0.4)",
-                  },
-                };
-              }
-              return {
-                ...node,
-                style: {
-                  ...node.style,
-                  border: undefined,
-                  boxShadow: undefined,
-                },
-              };
-            })
-          );
-          return;
-        }
-
-        queuedNodeHighlightCountsRef.current[targetNodeId] =
-          (queuedNodeHighlightCountsRef.current[targetNodeId] || 0) + 1;
-        const repeatCount = queuedNodeHighlightCountsRef.current[targetNodeId];
-        if (repeatCount === 1) {
-          Logger.debug(
-            `[FlowGraph] Graph not ready. Queued highlight for ${targetNodeId}. nodes=${nodes.length} edges=${edges.length} ready=${isGraphReady} session=${currentSessionIdRef.current} globalSession=${globalSession}`
-          );
-        } else if (repeatCount % 5 === 0) {
-          Logger.debug(
-            `[FlowGraph] Graph still not ready after ${repeatCount} attempts for ${targetNodeId}. nodes=${nodes.length} edges=${edges.length} ready=${isGraphReady} session=${currentSessionIdRef.current} globalSession=${globalSession}`
-          );
-        }
-        setPendingHighlightNodeId(targetNodeId);
-        return;
-      }
-
-      const incomingEdges = edges.filter((e) => e.target === targetNodeId);
-      const edgeKeys = new Set(
-        incomingEdges.map((e) => `${e.source}->${e.target}`)
-      );
-      setNodeHighlightedEdges(edgeKeys);
-      setHighlightedNodeId(targetNodeId);
-
-      const allNodesData = nodes
-        .filter((n) => n.type === "functionNode")
-        .map((n) => ({
-          id: n.id,
-          label: (n.data as FunctionNodeData).label,
-          type: (n.data as FunctionNodeData).type,
-          file: (n.data as FunctionNodeData).file,
-          line: (n.data as FunctionNodeData).line,
-        }));
-      const traced = EdgeTracker.tracePathsToRoot(targetNodeId, allNodesData);
-      if (traced) {
-        const report = EdgeTracker.getFormattedPathReport(traced);
-        vscode.postMessage({
-          command: "showPathTrace",
-          tracedPath: traced,
-          formattedReport: report,
-        });
-      }
-
-      setEdges((current) =>
-        current.map((edge) => {
-          const currentKey = `${edge.source}->${edge.target}`;
-          const isLineHighlighted = lineHighlightedEdges.has(currentKey);
-          const isNodeHighlighted = edgeKeys.has(currentKey);
-          const originalDashArray = getOriginalDashArray(edge);
-
-          if (isLineHighlighted) {
-            return {
-              ...edge,
-              animated: true,
-              style: {
-                ...edge.style,
-                stroke: "#FFC107",
-                strokeWidth: 4,
-                strokeDasharray: originalDashArray,
-              },
-              zIndex: 1000,
-            };
-          }
-          if (isNodeHighlighted) {
-            return {
-              ...edge,
-              animated: true,
-              style: {
-                ...edge.style,
-                stroke: "#FF6B6B",
-                strokeWidth: 3,
-                strokeDasharray: originalDashArray,
-              },
-              zIndex: 999,
-            };
-          }
-          return {
-            ...edge,
-            animated: false,
-            style: {
-              ...edge.style,
-              stroke: "#666",
-              strokeWidth: 2,
-              strokeDasharray: originalDashArray,
-            },
-            zIndex: 1,
-          };
-        })
-      );
-
-      setNodes((currentNodes) =>
-        currentNodes.map((node) => {
-          const isParent = incomingEdges.some((e) => e.source === node.id);
-          const isTarget = node.id === targetNodeId;
-          if (isParent || isTarget) {
-            return {
-              ...node,
-              style: {
-                ...node.style,
-                border: isTarget ? "3px solid #FF6B6B" : "2px solid #FFA500",
-                boxShadow: isTarget
-                  ? "0 0 10px rgba(255,107,107,0.5)"
-                  : "0 0 8px rgba(255,165,0,0.4)",
-              },
-            };
-          }
-          return {
-            ...node,
-            style: {
-              ...node.style,
-              border: undefined,
-              boxShadow: undefined,
-            },
-          };
-        })
-      );
-    },
-    [
-      isGraphReady,
-      edges,
-      nodes,
-      lineHighlightedEdges,
-      getOriginalDashArray,
-      setEdges,
-      setNodes,
-      vscode,
-    ]
+  const toggleTraceDrawer = useCallback(
+    () => setIsTraceDrawerOpen((p) => !p),
+    []
   );
 
   useEffect(() => {
@@ -588,52 +266,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     vscode,
   ]);
 
-  const handleClearNodeHighlight = useCallback(() => {
-    setNodeHighlightedEdges(new Set());
-    setHighlightedNodeId(null);
-    setEdges((current) =>
-      current.map((edge) => {
-        const currentKey = `${edge.source}->${edge.target}`;
-        const isLineHighlighted = lineHighlightedEdges.has(currentKey);
-        const originalDashArray = getOriginalDashArray(edge);
-        if (isLineHighlighted) {
-          return {
-            ...edge,
-            animated: true,
-            style: {
-              ...edge.style,
-              stroke: "#FFC107",
-              strokeWidth: 4,
-              strokeDasharray: originalDashArray,
-            },
-            zIndex: 1000,
-          };
-        }
-        return {
-          ...edge,
-          animated: false,
-          style: {
-            ...edge.style,
-            stroke: "#666",
-            strokeWidth: 2,
-            strokeDasharray: originalDashArray,
-          },
-          zIndex: 1,
-        };
-      })
-    );
-    setNodes((currentNodes) =>
-      currentNodes.map((node) => ({
-        ...node,
-        style: {
-          ...node.style,
-          border: undefined,
-          boxShadow: undefined,
-        },
-      }))
-    );
-  }, [lineHighlightedEdges, getOriginalDashArray, setEdges, setNodes]);
-
   useEffect(() => {
     if (isGraphReady && nodes.length > 0 && edges.length > 0) {
       (window as any).__goflowGraphReady = true;
@@ -680,157 +312,35 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     return () => unsubscribe();
   }, []);
 
-  const renderGraph = useCallback(
-    async (data: GraphData, fileName?: string) => {
-      try {
-        (window as any).__goflowPendingNodeHighlight = null;
-        (window as any).__goflowPendingLineClick = null;
-        (window as any).__goflowPendingEdgeHighlights = [];
-
-        renderStartRef.current = performance.now();
-        renderInvocationCountRef.current += 1;
-
-        Logger.info(`[FlowGraph] 🚀 START renderGraph`, {
-          fileName,
-          rawNodeCount: data.nodes.length,
-          rawEdgeCount: data.edges.length,
-          invocation: renderInvocationCountRef.current,
-          sessionId: currentSessionIdRef.current,
-          previousReadyState: isGraphReady,
-          previousNodeCount: nodes.length,
-          previousEdgeCount: edges.length,
-        });
-        logToExtension("DEBUG", "[FlowGraph] renderGraph start", {
-          fileName,
-          nodeCount: data.nodes.length,
-          edgeCount: data.edges.length,
-          isGraphReadyBefore: isGraphReady,
-          invocation: renderInvocationCountRef.current,
-          sessionId: currentSessionIdRef.current,
-        });
-        if (fileName) {
-          setCurrentFileName(fileName);
-          const firstNode = data.nodes[0];
-          const fileContent = firstNode?.code || "";
-          const detected = detectFramework(fileName, fileContent);
-          setDetectedFramework(detected);
-          logToExtension("DEBUG", "[FlowGraph] Framework detection", {
-            detected: detected?.strategy.description,
-          });
-        }
-
-        const { nodes: flowNodes, edges: flowEdges } =
-          convertToFlowDataExternal(data, {
-            vscode,
-            detectedDirection: detectedFramework?.strategy.direction,
-            lineHighlightedEdges,
-            onHighlightEdge: handleHighlightEdge,
-            onClearHighlight: handleClearHighlight,
-            onNodeHighlight: handleNodeHighlight,
-            onClearNodeHighlight: handleClearNodeHighlight,
-          });
-        const { nodes: layoutedNodes, edges: layoutedEdges } =
-          await getLayoutedElements(flowNodes, flowEdges, detectedFramework);
-
-        setNodes(layoutedNodes);
-        setEdges(layoutedEdges);
-        logToExtension("DEBUG", "[FlowGraph] Layout applied", {
-          layoutNodeCount: layoutedNodes.length,
-          layoutEdgeCount: layoutedEdges.length,
-          invocation: renderInvocationCountRef.current,
-        });
-
-        setRootIfUnset(layoutedNodes);
-
-        setIsLoading(false);
-        setError(null);
-        setIsGraphReady(true);
-        logToExtension("INFO", "[FlowGraph] Graph ready", {
-          invocation: renderInvocationCountRef.current,
-          sessionId: currentSessionIdRef.current,
-          queuedNodeHighlightAttempts: Object.entries(
-            queuedNodeHighlightCountsRef.current
-          ).map(([nodeId, attempts]) => ({ nodeId, attempts })),
-          queuedEdgeEventsTotal: queuedEdgeHighlightCountRef.current,
-          bufferedPrevGraph: {
-            hadBuffer: midReloadRef.current,
-            prevNodeCount: prevNodesRef.current.length,
-            prevEdgeCount: prevEdgesRef.current.length,
-          },
-        });
-        (window as any).__goflowGraphReady = true;
-        (window as any).__goflowSessionId = currentSessionIdRef.current;
-        (window as any).__goflowEffectiveGraphReady = true;
-        (window as any).__goflowEdges = layoutedEdges;
-        window.dispatchEvent(
-          new CustomEvent("goflow-effective-ready", {
-            detail: {
-              sessionId: currentSessionIdRef.current,
-              nodeCount: layoutedNodes.length,
-              edgeCount: layoutedEdges.length,
-            },
-          })
-        );
-        midReloadRef.current = false;
-        prevNodesRef.current = [];
-        prevEdgesRef.current = [];
-        try {
-          const pendingNodeId = (window as any).__goflowPendingNodeHighlight;
-          if (pendingNodeId) {
-            delete (window as any).__goflowPendingNodeHighlight;
-            handleNodeHighlight(pendingNodeId);
-          }
-          const pendingEdges =
-            (window as any).__goflowPendingEdgeHighlights || [];
-          if (Array.isArray(pendingEdges) && pendingEdges.length > 0) {
-            pendingEdges.forEach((h: any) =>
-              handleHighlightEdge(h.source, h.target)
-            );
-            delete (window as any).__goflowPendingEdgeHighlights;
-          }
-        } catch {}
-
-        buildStaticExecutionTrace(layoutedEdges, layoutedNodes);
-        const elapsed = performance.now() - renderStartRef.current;
-        logToExtension("INFO", "[FlowGraph] Graph layout completed", {
-          layoutNodeCount: layoutedNodes.length,
-          layoutEdgeCount: layoutedEdges.length,
-          elapsedMs: Math.round(elapsed),
-          pendingHighlightNodeId:
-            (window as any).__goflowPendingNodeHighlight || null,
-          pendingEdgeQueueSize: Array.isArray(
-            (window as any).__goflowPendingEdgeHighlights
-          )
-            ? (window as any).__goflowPendingEdgeHighlights.length
-            : 0,
-        });
-      } catch (err) {
-        console.error("[FlowGraph] Failed to render graph:", err);
-        logToExtension("ERROR", "[FlowGraph] renderGraph failure", {
-          error: err instanceof Error ? err.message : String(err),
-        });
-        setError(err instanceof Error ? err.message : "Unknown error");
-        setIsLoading(false);
-        setIsGraphReady(false);
-      }
-    },
-    [
-      setNodes,
-      setEdges,
-      detectedFramework,
-      getLayoutedElements,
-      buildStaticExecutionTrace,
-      lineHighlightedEdges,
-      handleHighlightEdge,
-      handleClearHighlight,
-      handleNodeHighlight,
-      handleClearNodeHighlight,
-      isGraphReady,
-      nodes,
-      logToExtension,
-      setRootIfUnset,
-    ]
-  );
+  const { renderGraph } = useRenderGraph({
+    detectedFramework,
+    setNodes,
+    setEdges,
+    setCurrentFileName,
+    setDetectedFramework,
+    setIsLoading,
+    setError,
+    setIsGraphReady,
+    lineHighlightedEdges,
+    handleHighlightEdge,
+    handleClearHighlight,
+    handleNodeHighlight,
+    handleClearNodeHighlight,
+    nodes,
+    vscode,
+    buildStaticExecutionTrace,
+    setRootIfUnset,
+    logToExtension,
+    queuedNodeHighlightCountsRef,
+    queuedEdgeHighlightCountRef,
+    midReloadRef,
+    prevNodesRef,
+    prevEdgesRef,
+    currentSessionIdRef,
+    renderStartRef,
+    renderInvocationCountRef,
+    isGraphReady,
+  });
 
   const onNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
@@ -988,238 +498,30 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     vscode.postMessage({ command: "ready" });
   }, [vscode]);
 
-  useEffect(() => {
-    const messageHandler = async (event: MessageEvent) => {
-      const message = event.data;
-      if (!message || typeof message.command !== "string") {
-        return;
-      }
-      try {
-        switch (message.command) {
-          case "setNodeDraggable":
-            setNodes((curr) =>
-              curr.map((n) =>
-                n.id === message.nodeId
-                  ? { ...n, draggable: !!message.draggable }
-                  : n
-              )
-            );
-            break;
-          case "renderGraph":
-            Logger.info(
-              `[FlowGraph] renderGraph command received (prevReady=${isGraphReady}) nodesInPayload=${
-                message.data?.nodes?.length ?? 0
-              } edgesInPayload=${message.data?.edges?.length ?? 0} invocation=${
-                renderInvocationCountRef.current + 1
-              } nextSession=${sessionCounterRef.current + 1}`
-            );
-            sessionCounterRef.current += 1;
-            currentSessionIdRef.current = sessionCounterRef.current;
-            (window as any).__goflowSessionId = currentSessionIdRef.current;
-            logToExtension("DEBUG", "[FlowGraph] renderGraph init", {
-              sessionId: currentSessionIdRef.current,
-              invocation: renderInvocationCountRef.current + 1,
-              prevReadyState: isGraphReady,
-              timestamp: Date.now(),
-              prevNodeCount: nodes.length,
-              prevEdgeCount: edges.length,
-            });
-            (window as any).__goflowGraphReady = false;
-            (window as any).__goflowSessionId = currentSessionIdRef.current;
-            (window as any).__goflowEffectiveGraphReady = false;
-            (window as any).__goflowEdges = [];
-            (window as any).__goflowEdgesClearedAt = Date.now();
-            try {
-              prevNodesRef.current = nodes;
-              prevEdgesRef.current = edges;
-              midReloadRef.current = true;
-              (window as any).__goflowPrevSessionBuffered = {
-                nodeCount: prevNodesRef.current.length,
-                edgeCount: prevEdgesRef.current.length,
-                sessionId: currentSessionIdRef.current - 1,
-              };
-            } catch {}
-            setIsGraphReady(false);
-            if (message.config) {
-              setEnableJumpToFile(message.config.enableJumpToFile);
-            }
-            if (message.theme && typeof message.theme.isDark === "boolean") {
-              if (!(window as any).__monacoAppliedTheme) {
-                (window as any).__goflowTheme = message.theme;
-              } else {
-                Logger.debug(
-                  "[FlowGraph] Ignored theme payload (theme already locked)"
-                );
-              }
-            } else if (message.theme) {
-              Logger.debug(
-                "[FlowGraph] Ignored invalid theme payload (missing isDark boolean)"
-              );
-            }
-            await renderGraph(message.data, message.data?.fileName);
-            break;
-          case "refresh":
-            if (message.data) {
-              await renderGraph(message.data, message.data?.fileName);
-            }
-            break;
-          case "highlightEdge":
-            {
-              const globalReady = !!(window as any).__goflowGraphReady;
-              const globalEdges = (window as any).__goflowEdges;
-              const globalEdgeCount = Array.isArray(globalEdges)
-                ? globalEdges.length
-                : 0;
-              const effectiveReady =
-                isGraphReady && nodes.length > 0 && edges.length > 0;
-              const fallbackReady =
-                globalReady && globalEdgeCount > 0 && nodes.length === 0;
-
-              if (!effectiveReady && !fallbackReady) {
-                queuedEdgeHighlightCountRef.current += 1;
-                const edgeQueueLen =
-                  ((window as any).__goflowPendingEdgeHighlights || []).length +
-                  1;
-                if (
-                  queuedEdgeHighlightCountRef.current === 1 ||
-                  queuedEdgeHighlightCountRef.current % 5 === 0
-                ) {
-                  Logger.debug(
-                    `[FlowGraph] Graph not ready. Queued edge highlight ${message.sourceNodeId}->${message.targetNodeId}`,
-                    {
-                      totalQueuedEdgeEvents:
-                        queuedEdgeHighlightCountRef.current,
-                      queueLen: edgeQueueLen,
-                      reactReady: isGraphReady,
-                      reactNodeCount: nodes.length,
-                      reactEdgeCount: edges.length,
-                      globalReady,
-                      globalEdgeCount,
-                    }
-                  );
-                }
-                const pending =
-                  (window as any).__goflowPendingEdgeHighlights || [];
-                pending.push({
-                  source: message.sourceNodeId,
-                  target: message.targetNodeId,
-                });
-                (window as any).__goflowPendingEdgeHighlights = pending;
-                return;
-              }
-
-              if (
-                fallbackReady &&
-                prevNodesRef.current.length > 0 &&
-                prevEdgesRef.current.length > 0
-              ) {
-                Logger.info(
-                  `[FlowGraph] Using buffered graph for edge highlight (React state not synced yet)`,
-                  {
-                    bufferedNodeCount: prevNodesRef.current.length,
-                    bufferedEdgeCount: prevEdgesRef.current.length,
-                    sourceNodeId: message.sourceNodeId,
-                    targetNodeId: message.targetNodeId,
-                  }
-                );
-                setNodes(prevNodesRef.current);
-                setEdges(prevEdgesRef.current);
-                setIsGraphReady(true);
-              }
-
-              handleHighlightEdge(message.sourceNodeId, message.targetNodeId);
-
-              // Delegate dynamic execution trace update to hook
-              handleCallEdge(
-                message.sourceNodeId,
-                message.targetNodeId,
-                typeof message.sourceCallLine === "number"
-                  ? message.sourceCallLine
-                  : undefined
-              );
-            }
-            break;
-          case "clearHighlight":
-            handleClearHighlight();
-            break;
-          case "recordTraceLine":
-            if (
-              Array.isArray(message.functionCalls) &&
-              typeof message.relativeLine === "number"
-            ) {
-              const sourceFnNode = nodes.find(
-                (n) =>
-                  n.id === message.sourceNodeId && n.type === "functionNode"
-              );
-              const sourceCode =
-                sourceFnNode && (sourceFnNode.data as FunctionNodeData).code
-                  ? (sourceFnNode.data as FunctionNodeData).code
-                  : undefined;
-              const sourceLines = sourceCode ? sourceCode.split("\n") : [];
-              const srcLineContent =
-                sourceLines[message.relativeLine - 1] ||
-                message.lineContent ||
-                "";
-              recordUnresolvedCalls(
-                message.sourceNodeId,
-                message.relativeLine,
-                message.functionCalls,
-                srcLineContent
-              );
-            }
-            break;
-          case "recordTraceLineRaw":
-            if (typeof message.relativeLine === "number") {
-              const sourceFnNode = nodes.find(
-                (n) =>
-                  n.id === message.sourceNodeId && n.type === "functionNode"
-              );
-              const sourceCode =
-                sourceFnNode && (sourceFnNode.data as FunctionNodeData).code
-                  ? (sourceFnNode.data as FunctionNodeData).code
-                  : undefined;
-              const sourceLines = sourceCode ? sourceCode.split("\n") : [];
-              const srcLineContent =
-                sourceLines[message.relativeLine - 1] ||
-                message.lineContent ||
-                "";
-              recordRawLine(
-                message.sourceNodeId,
-                message.relativeLine,
-                srcLineContent
-              );
-            }
-            break;
-          case "tracePathForLineClick":
-            handleNodeHighlight(message.targetNodeId);
-            break;
-          default:
-            Logger.debug(
-              `[FlowGraph] Ignored unknown command: ${message.command}`
-            );
-        }
-      } catch (err) {
-        console.error("[FlowGraph] Error handling message:", err);
-        setError(err instanceof Error ? err.message : "Unknown error");
-        setIsLoading(false);
-      }
-    };
-    window.addEventListener("message", messageHandler);
-    return () => window.removeEventListener("message", messageHandler);
-  }, [
+  // Centralized window message bridge hook
+  useMessageBridge({
     renderGraph,
     handleHighlightEdge,
     handleClearHighlight,
     handleNodeHighlight,
-    isGraphReady,
-    nodes,
-    edges,
     handleCallEdge,
     recordUnresolvedCalls,
     recordRawLine,
+    isGraphReady,
+    nodes,
+    edges,
     setNodes,
     setEdges,
-  ]);
+    setEnableJumpToFile,
+    queuedEdgeHighlightCountRef,
+    prevNodesRef,
+    prevEdgesRef,
+    midReloadRef,
+    sessionCounterRef,
+    currentSessionIdRef,
+    renderInvocationCountRef,
+    logToExtension,
+  });
 
   return (
     <div style={{ width: "100vw", height: "100vh" }}>
@@ -1318,76 +620,19 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             zoomable
             pannable
           />
-          <Panel
-            position="top-right"
-            className="flow-graph-panel flow-graph-panel-modern"
-          >
-            <div className="flow-graph-button-group">
-              <button
-                onClick={handleToggleDrawer}
-                className="fg-btn"
-                title="Node Visibility"
-              >
-                👁️
-              </button>
-              <button
-                onClick={() => setEnableJumpToFile(!enableJumpToFile)}
-                className={`fg-btn ${
-                  enableJumpToFile ? "fg-btn-active" : "fg-btn-inactive"
-                }`}
-                title={
-                  enableJumpToFile ? "Jump to file: ON" : "Jump to file: OFF"
-                }
-              >
-                {enableJumpToFile ? "🔗" : "⛔"}
-              </button>
-              <button
-                onClick={handleAutoSort}
-                className="fg-btn"
-                title={
-                  detectedFramework
-                    ? `Auto Sort: ${detectedFramework.strategy.description}`
-                    : "Auto Sort Layout"
-                }
-                disabled={!detectedFramework || isAutoSorting}
-              >
-                {isAutoSorting ? "⏳" : "🔄"}
-              </button>
-              <button onClick={handleFit} className="fg-btn" title="Fit view">
-                ⊡
-              </button>
-              <button
-                onClick={handleExport}
-                className="fg-btn"
-                title="Export diagram"
-              >
-                💾
-              </button>
-              <button
-                onClick={() => {
-                  const stats = EdgeTracker.getStats();
-                  EdgeTracker.logCurrentState();
-                  vscode.postMessage({
-                    command: "showEdgeStats",
-                    stats,
-                    edges: EdgeTracker.getAllEdges(),
-                    formattedReport: EdgeTracker.getEdgeListFormatted(),
-                  });
-                }}
-                className="fg-btn"
-                title="Edge statistics"
-              >
-                📊
-              </button>
-              <button
-                onClick={() => setIsTraceDrawerOpen((p) => !p)}
-                className={`fg-btn ${isTraceDrawerOpen ? "fg-btn-active" : ""}`}
-                title="Execution Flow List"
-              >
-                🗒️
-              </button>
-            </div>
-          </Panel>
+          <FlowGraphToolbar
+            enableJumpToFile={enableJumpToFile}
+            setEnableJumpToFile={setEnableJumpToFile}
+            detectedFramework={detectedFramework}
+            isAutoSorting={isAutoSorting}
+            handleAutoSort={handleAutoSort}
+            handleFit={handleFit}
+            handleExport={handleExport}
+            isTraceDrawerOpen={isTraceDrawerOpen}
+            toggleTraceDrawer={toggleTraceDrawer}
+            handleToggleDrawer={handleToggleDrawer}
+            vscode={vscode}
+          />
           {detectedFramework && (
             <Panel position="bottom-left" className="flow-graph-info-panel">
               <div className="flow-graph-info-content">
