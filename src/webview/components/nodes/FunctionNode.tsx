@@ -4,6 +4,31 @@ import MonacoCodeEditor from "../editors/MonacoCodeEditor";
 import "../../styles/function-node.css";
 import { Logger } from "../../../utils/webviewLogger";
 
+/**
+ * ╔══════════════════════════════════════════════════════════════════════════╗
+ * ║                    ⚠️  CRITICAL: DO NOT REMOVE  ⚠️                       ║
+ * ╠══════════════════════════════════════════════════════════════════════════╣
+ * ║                                                                          ║
+ * ║  CƠ CHẾ 2 TRẠNG THÁI (Move Mode / Static Mode) LÀ BẮT BUỘC             ║
+ * ║                                                                          ║
+ * ║  1. State: `isMoveMode` (mặc định = true)                               ║
+ * ║     - Move Mode: Node draggable, Monaco Editor read-only                ║
+ * ║     - Static Mode: Node static, Monaco Editor có thể select text        ║
+ * ║                                                                          ║
+ * ║  2. useEffect đồng bộ với ReactFlow:                                    ║
+ * ║     - Gửi message `setNodeDraggable` để ReactFlow cập nhật draggable    ║
+ * ║                                                                          ║
+ * ║  3. Event handlers bắt buộc:                                            ║
+ * ║     - onMouseDown/onPointerDown: chặn drag khi Static Mode              ║
+ * ║     - Không chặn = conflict giữa ReactFlow drag và Monaco selection     ║
+ * ║                                                                          ║
+ * ║  4. CSS class `.move-mode` và styles liên quan KHÔNG ĐƯỢC XÓA           ║
+ * ║                                                                          ║
+ * ║  ⚠️  XÓA CƠ CHẾ NÀY SẼ PHÁ VỠ TOÀN BỘ TƯƠNG TÁC NODE VÀ EDITOR  ⚠️      ║
+ * ║                                                                          ║
+ * ╚══════════════════════════════════════════════════════════════════════════╝
+ */
+
 const NODE_COLORS = {
   function: {
     header: "bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500",
@@ -129,7 +154,7 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [isNodeHighlighted, setIsNodeHighlighted] = useState(false);
-  const [isMoveMode, setIsMoveMode] = useState(false); // NEW: chế độ di chuyển bật/tắt
+  const [isMoveMode, setIsMoveMode] = useState(true);
   const [editorHeight, setEditorHeight] = useState(150);
   const [totalNodeHeight, setTotalNodeHeight] = useState(206); // Initial: 56 (header) + 150 (editor) + 8 (padding)
   const nodeData = data as FunctionNodeData;
@@ -469,22 +494,6 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
               💾 Saving...
             </span>
           )}
-          <button
-            className={`code-entity-node-move-toggle ${
-              isMoveMode ? "active" : ""
-            }`}
-            title={
-              isMoveMode
-                ? "Tắt chế độ di chuyển (trở về chế độ chọn code)"
-                : "Bật chế độ di chuyển (kéo node ở mọi vùng)"
-            }
-            onClick={(e) => {
-              e.stopPropagation(); // Không kích hoạt drag khi nhấn nút
-              setIsMoveMode((m) => !m);
-            }}
-          >
-            {isMoveMode ? "🖐️ Moving" : "⬍ Move"}
-          </button>
         </div>
 
         <div
