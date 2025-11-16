@@ -18,50 +18,27 @@ import FunctionNode from "./nodes/FunctionNode";
 import FileGroupContainer from "./containers/FileGroupContainer";
 import { GraphData } from "../../models/Node";
 import { detectFramework, FrameworkConfig } from "../configs/layoutStrategies";
-import { applyLayout } from "../utils/layoutEngines";
-import { EdgeTracker, EdgeConnection } from "../utils/EdgeTracker";
+import {
+  getLayoutedElements,
+  calculateFileGroupContainers,
+} from "../utils/graphLayout";
+import { EdgeTracker } from "../utils/EdgeTracker";
 import { Logger } from "../../utils/webviewLogger";
 import NodeVisibilityDrawer from "./drawers/NodeVisibilityDrawer";
 import DeclarationNode from "./nodes/DeclarationNode";
 import CallOrderEdge from "./edges/CallOrderEdge";
-import ExecutionTraceDrawer, {
-  ExecutionTraceEntry,
-} from "./drawers/ExecutionTraceDrawer";
+import ExecutionTraceDrawer from "./drawers/ExecutionTraceDrawer";
+import useDebounce from "../hooks/useDebounce";
+import convertToFlowDataExternal from "../utils/flowConversion";
+import useExecutionTrace from "../hooks/useExecutionTrace";
 
-interface FunctionNodeData extends Record<string, unknown> {
-  id: string;
-  label: string;
-  type: "function" | "method";
-  file: string;
-  line: number;
-  endLine?: number;
-  code: string;
-  vscode?: any;
-  onHighlightEdge?: (sourceNodeId: string, targetNodeId: string) => void;
-  onClearHighlight?: () => void;
-  onNodeHighlight?: (nodeId: string) => void;
-  onClearNodeHighlight?: () => void;
-  allNodes?: any[];
-  lineHighlightedEdges?: Set<string>;
-}
-
-interface DeclarationNodeData extends Record<string, unknown> {
-  id: string;
-  label: string;
-  type: "class" | "struct" | "interface" | "enum" | "type";
-  file: string;
-  line: number;
-  code: string;
-  language?: string;
-  usedBy?: any[];
-}
-
-type FlowNode = Node<FunctionNodeData> | Node<DeclarationNodeData>;
-type FlowEdge = Edge;
-
-interface FlowGraphProps {
-  vscode: any;
-}
+import type {
+  FunctionNodeData,
+  DeclarationNodeData,
+  FlowNode,
+  FlowEdge,
+  FlowGraphProps,
+} from "../types/flowGraph";
 
 const nodeTypes = {
   functionNode: FunctionNode as React.ComponentType<any>,
@@ -71,16 +48,6 @@ const nodeTypes = {
 
 const edgeTypes = {
   callOrderEdge: CallOrderEdge as React.ComponentType<any>,
-};
-
-// Debounce hook
-const useDebounce = (value: any, delay: number) => {
-  const [debouncedValue, setDebouncedValue] = useState(value);
-  useEffect(() => {
-    const handler = setTimeout(() => setDebouncedValue(value), delay);
-    return () => clearTimeout(handler);
-  }, [value, delay]);
-  return debouncedValue;
 };
 
 const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
@@ -109,7 +76,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
   >(null);
   const [isGraphReady, setIsGraphReady] = useState(false);
 
-  // Đảm bảo reset global state khi unmount hoặc reload
   useEffect(() => {
     return () => {
       (window as any).__goflowGraphReady = false;
@@ -129,47 +95,24 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     }
   });
 
-  // NEW: ExecutionTraceDrawer now shows static call order list derived from edges
   const [isTraceDrawerOpen, setIsTraceDrawerOpen] = useState(false);
-  const [executionTrace, setExecutionTrace] = useState<ExecutionTraceEntry[]>(
-    []
-  );
-  // Track last CALL entry per caller to synthesize RETURN segment before next call
-  const lastCallEntryRef = useRef<Map<string, ExecutionTraceEntry>>(new Map());
-  // Root function snapshot references (first function node rendered)
-  const rootNodeIdRef = useRef<string | undefined>(undefined);
-  const rootCodeRef = useRef<string | undefined>(undefined);
-  const rootStartLineRef = useRef<number | undefined>(undefined);
-  // Instrumentation: track render start timestamps for performance diagnostics
+
+  // Instrumentation / session tracking
   const renderStartRef = useRef<number>(0);
   const renderInvocationCountRef = useRef<number>(0);
   const queuedNodeHighlightCountsRef = useRef<Record<string, number>>({});
   const queuedEdgeHighlightCountRef = useRef<number>(0);
-  // Session tracking to diagnose readiness resets
   const sessionCounterRef = useRef<number>(0);
   const currentSessionIdRef = useRef<number>(0);
   const prevGraphReadyRef = useRef<boolean>(false);
-  // Mid-reload buffering: preserve previous graph while new render session builds
   const midReloadRef = useRef<boolean>(false);
   const prevNodesRef = useRef<FlowNode[]>([]);
   const prevEdgesRef = useRef<FlowEdge[]>([]);
 
-  // Auto-save hidden nodes
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        "goflow-hidden-nodes",
-        JSON.stringify(Array.from(hiddenNodeIds))
-      );
-    } catch (error) {
-      console.error("[FlowGraph] Failed to persist hidden nodes", error);
-    }
-  }, [hiddenNodeIds]);
-
   const debouncedNodes = useDebounce(nodes, 100);
   const lastContainerUpdateRef = useRef<string>("");
 
-  // Structured logging bridge
+  // Logging bridge (declare BEFORE hook usage)
   const logToExtension = useCallback(
     (
       level: "DEBUG" | "INFO" | "WARN" | "ERROR",
@@ -198,6 +141,32 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     },
     [vscode]
   );
+
+  // Execution trace hook (encapsulates static + dynamic trace logic)
+  const {
+    executionTrace,
+    buildStaticExecutionTrace,
+    clearTrace,
+    handleCallEdge,
+    recordUnresolvedCalls,
+    recordRawLine,
+    rootNodeId,
+    rootCode,
+    rootStartLine,
+    setRootIfUnset,
+  } = useExecutionTrace({ logFn: logToExtension });
+
+  // Persist hidden node IDs
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "goflow-hidden-nodes",
+        JSON.stringify(Array.from(hiddenNodeIds))
+      );
+    } catch (error) {
+      console.error("[FlowGraph] Failed to persist hidden nodes", error);
+    }
+  }, [hiddenNodeIds]);
 
   const getOriginalDashArray = useCallback(
     (edge: FlowEdge): string | undefined => {
@@ -323,7 +292,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
   const handleNodeHighlight = useCallback(
     (targetNodeId: string) => {
       if (!isGraphReady || edges.length === 0 || nodes.length === 0) {
-        // Special case: mid-reload with buffered previous graph and previous global ready state was true
         const globalSession = (window as any).__goflowSessionId;
         const canUseBuffered =
           midReloadRef.current &&
@@ -338,7 +306,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             `[FlowGraph] Mid-reload highlight using buffered previous graph for ${targetNodeId}. bufferedNodes=${prevNodesRef.current.length} bufferedEdges=${prevEdgesRef.current.length} session=${currentSessionIdRef.current} globalSession=${globalSession}`
           );
 
-          // Derive incoming edges from buffered edges
           const bufferedIncoming = prevEdgesRef.current.filter(
             (e) => e.target === targetNodeId
           );
@@ -428,7 +395,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           return;
         }
 
-        // Fallback: queue highlight normally
         queuedNodeHighlightCountsRef.current[targetNodeId] =
           (queuedNodeHighlightCountsRef.current[targetNodeId] || 0) + 1;
         const repeatCount = queuedNodeHighlightCountsRef.current[targetNodeId];
@@ -452,7 +418,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
       setNodeHighlightedEdges(edgeKeys);
       setHighlightedNodeId(targetNodeId);
 
-      // Trace paths to root (for overlay or stats)
       const allNodesData = nodes
         .filter((n) => n.type === "functionNode")
         .map((n) => ({
@@ -558,7 +523,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     ]
   );
 
-  // Track isGraphReady transitions
   useEffect(() => {
     if (prevGraphReadyRef.current !== isGraphReady) {
       logToExtension("DEBUG", "[FlowGraph] isGraphReady transition", {
@@ -578,7 +542,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     currentSessionIdRef.current,
   ]);
 
-  // Process pending highlight
   useEffect(() => {
     if (
       isGraphReady &&
@@ -590,13 +553,10 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
       setPendingHighlightNodeId(null);
     }
 
-    // Process pending line click
     if (isGraphReady && edges.length > 0 && nodes.length > 0) {
       const pendingLineClick = (window as any).__goflowPendingLineClick;
       if (pendingLineClick) {
         delete (window as any).__goflowPendingLineClick;
-
-        // Re-trigger line click logic
         try {
           vscode.postMessage({
             command: "resolveDefinitionAtLine",
@@ -674,26 +634,22 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     );
   }, [lineHighlightedEdges, getOriginalDashArray, setEdges, setNodes]);
 
-  // Thêm effect để đồng bộ global ready state (moved after handleNodeHighlight declaration)
   useEffect(() => {
     if (isGraphReady && nodes.length > 0 && edges.length > 0) {
       (window as any).__goflowGraphReady = true;
       (window as any).__goflowEdges = edges;
       (window as any).__goflowEffectiveGraphReady = true;
-      (window as any).__goflowNodes = nodes; // THÊM DÒNG NÀY
+      (window as any).__goflowNodes = nodes;
 
-      // Process any pending highlights immediately
       const pendingNodeId = (window as any).__goflowPendingNodeHighlight;
       if (pendingNodeId) {
         handleNodeHighlight(pendingNodeId);
         delete (window as any).__goflowPendingNodeHighlight;
       }
 
-      // Process any pending line clicks
       const pendingLineClick = (window as any).__goflowPendingLineClick;
       if (pendingLineClick) {
         delete (window as any).__goflowPendingLineClick;
-        // Re-trigger line click logic
         try {
           vscode.postMessage({
             command: "resolveDefinitionAtLine",
@@ -704,9 +660,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             nodeId: pendingLineClick.nodeId,
             shouldTracePath: false,
           });
-
           handleNodeHighlight(pendingLineClick.nodeId);
-
           Logger.info("[FlowGraph] Processed queued line click", {
             nodeId: pendingLineClick.nodeId,
             lineNumber: pendingLineClick.lineNumber,
@@ -721,548 +675,14 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     }
   }, [isGraphReady, nodes, edges, handleNodeHighlight, vscode]);
 
-  // File group container calculation
-  const calculateFileGroupContainers = useCallback(
-    (nodes: FlowNode[]): FlowNode[] => {
-      const containerNodes: FlowNode[] = [];
-      const nodesByFile = new Map<string, FlowNode[]>();
-
-      nodes.forEach((node) => {
-        let file: string;
-        if (node.type === "functionNode") {
-          file = (node.data as FunctionNodeData).file;
-        } else if (node.type === "declarationNode") {
-          const declData = node.data as DeclarationNodeData;
-          const usedBy = declData.usedBy || [];
-          const callerNode = nodes.find(
-            (n) => n.type === "functionNode" && usedBy.includes(n.id)
-          );
-          file = callerNode
-            ? (callerNode.data as FunctionNodeData).file
-            : (declData.file as string);
-        } else {
-          return;
-        }
-        if (!nodesByFile.has(file)) nodesByFile.set(file, []);
-        nodesByFile.get(file)!.push(node);
-      });
-
-      nodesByFile.forEach((fileNodes, file) => {
-        if (fileNodes.length === 0) return;
-        const padding = 60;
-        let minX = Infinity;
-        let minY = Infinity;
-        let maxX = -Infinity;
-        let maxY = -Infinity;
-
-        fileNodes.forEach((node) => {
-          let nodeWidth, nodeHeight;
-          if (node.type === "functionNode") {
-            nodeWidth = (node.style?.width as number) || 650;
-            nodeHeight = (node.style?.height as number) || 320;
-          } else if (node.type === "declarationNode") {
-            nodeWidth = (node.style?.width as number) || 350;
-            nodeHeight = (node.style?.height as number) || 200;
-          } else {
-            nodeWidth = 650;
-            nodeHeight = 320;
-          }
-          const x = node.position.x;
-          const y = node.position.y;
-          minX = Math.min(minX, x);
-          minY = Math.min(minY, y);
-          maxX = Math.max(maxX, x + nodeWidth);
-          maxY = Math.max(maxY, y + nodeHeight);
-        });
-
-        const containerWidth = maxX - minX + padding * 2;
-        const containerHeight = maxY - minY + padding * 2;
-        const functionNodeCount = fileNodes.filter(
-          (n) => n.type === "functionNode"
-        ).length;
-        const declarationNodeCount = fileNodes.filter(
-          (n) => n.type === "declarationNode"
-        ).length;
-
-        containerNodes.push({
-          id: `container-${file}`,
-          type: "fileGroupContainer" as const,
-          position: { x: minX - padding, y: minY - padding },
-          data: {
-            fileName: file,
-            nodeCount: fileNodes.length,
-            functionNodeCount,
-            declarationNodeCount,
-            width: containerWidth,
-            height: containerHeight,
-          } as any,
-          draggable: false,
-          selectable: false,
-          zIndex: 0,
-          style: { width: containerWidth, height: containerHeight },
-        } as FlowNode);
-      });
-
-      return containerNodes;
-    },
-    []
-  );
-
-  const getLayoutedElements = useCallback(
-    async (
-      nodes: FlowNode[],
-      edges: FlowEdge[],
-      framework?: FrameworkConfig | null
-    ): Promise<{ nodes: FlowNode[]; edges: FlowEdge[] }> => {
-      const strategy = framework?.strategy || {
-        algorithm: "dagre" as const,
-        direction: "TB" as const,
-        edgeType: "default" as const,
-        ranksep: 150,
-        nodesep: 100,
-        description: "Default Layout",
-      };
-      const layouted = await applyLayout(nodes, edges, strategy);
-      const flowNodes = layouted.nodes as FlowNode[];
-      const containers = calculateFileGroupContainers(flowNodes);
-      return { nodes: [...containers, ...flowNodes], edges: layouted.edges };
-    },
-    [calculateFileGroupContainers]
-  );
-
-  const convertToFlowData = useCallback(
-    (data: GraphData): { nodes: FlowNode[]; edges: FlowEdge[] } => {
-      const flowNodes: FlowNode[] = [];
-      const edgeConnections: EdgeConnection[] = [];
-      logToExtension("DEBUG", "[FlowGraph] convertToFlowData start", {
-        rawNodeCount: data.nodes.length,
-        rawEdgeCount: data.edges.length,
-        frameworkDirection: detectedFramework?.strategy.direction,
-      });
-
-      data.nodes.forEach((node) => {
-        if (node.type === "function" || node.type === "method") {
-          flowNodes.push({
-            id: node.id,
-            type: "functionNode" as const,
-            position: { x: 0, y: 0 },
-            draggable: false, // mặc định KHÔNG kéo, chỉ bật khi move-mode
-            data: {
-              id: node.id,
-              label: node.label,
-              type: node.type as "function" | "method",
-              file: node.file,
-              line: node.line,
-              endLine: node.endLine,
-              code: node.code || "",
-              vscode: vscode,
-              onHighlightEdge: handleHighlightEdge,
-              onClearHighlight: handleClearHighlight,
-              onNodeHighlight: handleNodeHighlight,
-              onClearNodeHighlight: handleClearNodeHighlight,
-              allNodes: data.nodes,
-              lineHighlightedEdges: lineHighlightedEdges,
-            } as FunctionNodeData,
-            style: {
-              width: 650,
-              height: 320,
-              minHeight: 206,
-            },
-            width: 650,
-            height: 320,
-            zIndex: 10,
-          } as FlowNode);
-        } else if (
-          node.type === "class" ||
-          node.type === "struct" ||
-          node.type === "interface" ||
-          node.type === "enum" ||
-          node.type === "type"
-        ) {
-          flowNodes.push({
-            id: node.id,
-            type: "declarationNode" as const,
-            position: { x: 0, y: 0 },
-            data: {
-              id: node.id,
-              label: node.label,
-              type: node.type,
-              file: node.file,
-              line: node.line,
-              code: node.code || "",
-              language: (node as any).language,
-              usedBy: (node as any).usedBy || [],
-            },
-            style: { width: 350, height: 200 },
-            width: 350,
-            height: 200,
-            zIndex: 5,
-          } as FlowNode);
-        }
-      });
-
-      const flowEdges: FlowEdge[] = data.edges
-        .filter((edge) => {
-          const sourceExists = flowNodes.some((n) => n.id === edge.source);
-          const targetExists = flowNodes.some((n) => n.id === edge.target);
-          if (edge.type === "uses") return sourceExists && targetExists;
-          return sourceExists && targetExists;
-        })
-        .map((edge, index) => {
-          const sourceNode = data.nodes.find((n) => n.id === edge.source);
-          const targetNode = data.nodes.find((n) => n.id === edge.target);
-
-          const hasReturnValue = edge.hasReturnValue ?? true;
-          const callOrder = (edge as any).callOrder;
-          const returnOrder = (edge as any).returnOrder;
-
-          const edgeStyle = hasReturnValue
-            ? {
-                stroke: "#666",
-                strokeWidth: 2,
-                strokeLinecap: "round" as const,
-              }
-            : {
-                stroke: "#888",
-                strokeWidth: 2,
-                strokeLinecap: "round" as const,
-                strokeDasharray: "8 4",
-              };
-
-          if (sourceNode && targetNode) {
-            edgeConnections.push({
-              source: edge.source,
-              target: edge.target,
-              sourceLabel: sourceNode.label,
-              targetLabel: targetNode.label,
-              sourceType: sourceNode.type as "function" | "method",
-              targetType: targetNode.type as "function" | "method",
-              timestamp: Date.now(),
-            });
-          }
-
-          let edgeType: string;
-          if (edge.type === "uses") edgeType = "default";
-          else if (callOrder !== undefined || returnOrder !== undefined)
-            edgeType = "callOrderEdge";
-          else edgeType = "default";
-
-          // Handle optimization (safe fallback)
-          let sourceHandle = "right";
-          let targetHandle = "left";
-          try {
-            const sourceFlowNode = flowNodes.find((n) => n.id === edge.source);
-            const targetFlowNode = flowNodes.find((n) => n.id === edge.target);
-            if (sourceFlowNode && targetFlowNode) {
-              // Basic direction-based handle selection
-              sourceHandle =
-                detectedFramework?.strategy.direction === "LR"
-                  ? "right"
-                  : "bottom";
-              targetHandle =
-                detectedFramework?.strategy.direction === "LR" ? "left" : "top";
-            } else if (edge.type === "uses") {
-              sourceHandle = "right";
-              targetHandle = "left";
-            }
-          } catch (err) {
-            Logger.warn(
-              `[convertToFlowData] Edge handle optimization failed for ${edge.source}->${edge.target}`
-            );
-          }
-
-          return {
-            id: `edge-${edge.source}-${edge.target}-${index}`,
-            source: edge.source,
-            target: edge.target,
-            sourceHandle,
-            targetHandle,
-            type: edgeType,
-            animated: false,
-            style: edgeStyle,
-            data: {
-              dashed: !hasReturnValue,
-              solid: hasReturnValue,
-              hasReturnValue,
-              callOrder,
-              returnOrder,
-            },
-            pathOptions: { borderRadius: 20, curvature: 0.5 },
-          };
-        });
-
-      EdgeTracker.updateEdges(edgeConnections);
-      (window as any).__goflowEdges = flowEdges;
-      logToExtension("DEBUG", "[FlowGraph] convertToFlowData complete", {
-        flowNodeCount: flowNodes.length,
-        flowEdgeCount: flowEdges.length,
-        edgeConnectionCount: edgeConnections.length,
-      });
-
-      return { nodes: flowNodes, edges: flowEdges };
-    },
-    [
-      vscode,
-      handleHighlightEdge,
-      handleClearHighlight,
-      handleNodeHighlight,
-      handleClearNodeHighlight,
-      lineHighlightedEdges,
-      detectedFramework?.strategy.direction,
-    ]
-  );
-
   useEffect(() => {
     const unsubscribe = EdgeTracker.subscribe((edges) => {});
     return () => unsubscribe();
   }, []);
 
-  const buildStaticExecutionTrace = useCallback(
-    (flowEdges: FlowEdge[], flowNodes: FlowNode[]) => {
-      // Build quick lookup maps for node code, label & start line
-      const nodeCodeMap = new Map<string, string>();
-      const nodeLabelMap = new Map<string, string>();
-      const nodeStartLineMap = new Map<string, number>();
-      flowNodes.forEach((n) => {
-        if (n.type === "functionNode") {
-          const fnData = n.data as FunctionNodeData;
-          nodeCodeMap.set(n.id, fnData.code || "");
-          nodeLabelMap.set(n.id, fnData.label || n.id);
-          nodeStartLineMap.set(n.id, fnData.line);
-        } else if (n.type === "declarationNode") {
-          const declData = n.data as DeclarationNodeData;
-          nodeCodeMap.set(n.id, declData.code || "");
-          nodeLabelMap.set(n.id, declData.label || n.id);
-          nodeStartLineMap.set(n.id, declData.line);
-        }
-      });
-
-      // Helper: attempt to find relative call line inside source function code
-      const findCallLine = (
-        sourceId: string,
-        targetId: string
-      ): { relLine?: number; content?: string } => {
-        const sourceCode = nodeCodeMap.get(sourceId);
-        if (!sourceCode) return {};
-        const targetLabel = nodeLabelMap.get(targetId);
-        if (!targetLabel) return {};
-        const lines = sourceCode.split("\n");
-        // naive search: first line containing "targetLabel("
-        const idx = lines.findIndex((l) => l.includes(`${targetLabel}(`));
-        if (idx >= 0) {
-          return { relLine: idx + 1, content: lines[idx] };
-        }
-        return {};
-      };
-
-      // (Removed callee progression helper; highlightUntilRelativeLine now uses caller sourceCallLine)
-
-      // Helper: find next call line in caller AFTER a given relative line
-      const findNextCallLineAfter = (
-        sourceId: string,
-        afterRelLine: number
-      ): number | undefined => {
-        const sourceCode = nodeCodeMap.get(sourceId);
-        if (!sourceCode) return undefined;
-        const lines = sourceCode.split("\n");
-        const callRegex = /\b([A-Za-z_][A-Za-z0-9_]*)\s*\(/;
-        for (let i = afterRelLine; i < lines.length; i++) {
-          const raw = lines[i];
-          const trimmed = raw.trim();
-          if (!trimmed || trimmed.startsWith("//")) continue;
-          if (trimmed.startsWith("func ")) continue;
-          if (callRegex.test(raw)) return i + 1; // 1-based
-        }
-        return undefined;
-      };
-
-      // Collect call entries enriched with code
-      const callEntries: ExecutionTraceEntry[] = flowEdges
-        .filter(
-          (e) =>
-            e.type === "callOrderEdge" &&
-            e.data &&
-            typeof (e.data as any).callOrder === "number"
-        )
-        .map((e) => {
-          const callOrder = (e.data as any).callOrder;
-          const sourceCode = nodeCodeMap.get(e.source);
-          const targetCode = nodeCodeMap.get(e.target);
-          const { relLine, content } = findCallLine(e.source, e.target);
-
-          return {
-            step: callOrder,
-            type: "call",
-            sourceNodeId: e.source,
-            targetNodeId: e.target,
-            sourceCallLine: relLine,
-            sourceLineContent: content,
-            sourceCode,
-            targetCode,
-            sourceStartLine: nodeStartLineMap.get(e.source),
-            targetStartLine: nodeStartLineMap.get(e.target),
-            timestamp: Date.now(),
-            // Legacy single-bound highlight
-            highlightUntilRelativeLine: relLine,
-            // NEW segment highlighting: for a CALL bright region = 1..call line
-            highlightSegmentStartRelativeLine: relLine ? 1 : undefined,
-            highlightSegmentEndRelativeLine: relLine,
-          } as ExecutionTraceEntry;
-        });
-
-      // Collect return entries enriched
-      const returnEntries: ExecutionTraceEntry[] = flowEdges
-        .filter(
-          (e) =>
-            e.type === "callOrderEdge" &&
-            e.data &&
-            typeof (e.data as any).returnOrder === "number"
-        )
-        .map((e) => {
-          const returnOrder = (e.data as any).returnOrder;
-          const sourceCode = nodeCodeMap.get(e.source);
-          const targetCode = nodeCodeMap.get(e.target);
-
-          // Find matching prior call entry for this edge to get its call line
-          const priorCall = callEntries.find(
-            (c) =>
-              c.sourceNodeId === e.source &&
-              c.targetNodeId === e.target &&
-              typeof c.sourceCallLine === "number"
-          );
-          const previousCallLine = priorCall?.sourceCallLine;
-
-          // Determine next call line after previous call line inside caller
-          let nextCallLine: number | undefined;
-          if (typeof previousCallLine === "number") {
-            nextCallLine = findNextCallLineAfter(e.source, previousCallLine);
-          }
-
-          return {
-            step: returnOrder,
-            type: "return",
-            sourceNodeId: e.source,
-            targetNodeId: e.target,
-            sourceCode,
-            targetCode,
-            sourceStartLine: nodeStartLineMap.get(e.source),
-            targetStartLine: nodeStartLineMap.get(e.target),
-            timestamp: Date.now(),
-            // Segment for RETURN: (previousCallLine+1) .. (nextCallLine or previousCallLine+1 if none)
-            highlightSegmentStartRelativeLine:
-              typeof previousCallLine === "number"
-                ? previousCallLine + 1
-                : undefined,
-            highlightSegmentEndRelativeLine:
-              typeof previousCallLine === "number"
-                ? nextCallLine || previousCallLine + 1
-                : undefined,
-          } as ExecutionTraceEntry;
-        });
-
-      // Merge & sort
-      const merged = [...callEntries, ...returnEntries].sort(
-        (a, b) => (a.step ?? 0) - (b.step ?? 0)
-      );
-
-      // Correlate call/return pairs per edge (source->target)
-      const correlationMap: Record<
-        string,
-        {
-          callStep?: number;
-          returnStep?: number;
-          callOrder?: number;
-          returnOrder?: number;
-          sourceNodeId: string;
-          targetNodeId: string;
-          hasSourceLineContent?: boolean;
-        }
-      > = {};
-
-      callEntries.forEach((c) => {
-        const key = `${c.sourceNodeId}->${c.targetNodeId}`;
-        correlationMap[key] = {
-          ...(correlationMap[key] || {}),
-          callStep: c.step,
-          callOrder: c.step,
-          sourceNodeId: c.sourceNodeId,
-          targetNodeId: c.targetNodeId,
-          hasSourceLineContent: !!c.sourceLineContent,
-        };
-      });
-      returnEntries.forEach((r) => {
-        const key = `${r.sourceNodeId}->${r.targetNodeId}`;
-        correlationMap[key] = {
-          ...(correlationMap[key] || {}),
-          returnStep: r.step,
-          returnOrder: r.step,
-          sourceNodeId: r.sourceNodeId,
-          targetNodeId: r.targetNodeId,
-        };
-      });
-
-      // Detect anomalies: return before call, missing return, missing call
-      const anomalies: {
-        key: string;
-        issue: string;
-        data: any;
-      }[] = [];
-      Object.entries(correlationMap).forEach(([key, v]) => {
-        if (v.callStep !== undefined && v.returnStep !== undefined) {
-          if ((v.returnStep as number) < (v.callStep as number)) {
-            anomalies.push({
-              key,
-              issue: "RETURN_BEFORE_CALL",
-              data: v,
-            });
-          }
-        } else if (v.callStep !== undefined && v.returnStep === undefined) {
-          anomalies.push({
-            key,
-            issue: "MISSING_RETURN",
-            data: v,
-          });
-        } else if (v.callStep === undefined && v.returnStep !== undefined) {
-          anomalies.push({
-            key,
-            issue: "RETURN_WITHOUT_CALL",
-            data: v,
-          });
-        }
-      });
-
-      setExecutionTrace(merged);
-      logToExtension(
-        "INFO",
-        "[StaticTrace] Built execution flow list (enriched)",
-        {
-          callCount: callEntries.length,
-          returnCount: returnEntries.length,
-          total: merged.length,
-          withSourceLines: callEntries.filter((c) => c.sourceCallLine).length,
-          edgePairs: Object.keys(correlationMap).length,
-          anomalyCount: anomalies.length,
-        }
-      );
-
-      if (anomalies.length > 0) {
-        logToExtension("WARN", "[StaticTrace] Detected execution anomalies", {
-          anomalies: anomalies.slice(0, 50), // cap for safety
-        });
-      } else {
-        logToExtension(
-          "DEBUG",
-          "[StaticTrace] No execution anomalies detected"
-        );
-      }
-    },
-    [logToExtension]
-  );
-
   const renderGraph = useCallback(
     async (data: GraphData, fileName?: string) => {
       try {
-        // Reset all pending states when starting new render
         (window as any).__goflowPendingNodeHighlight = null;
         (window as any).__goflowPendingLineClick = null;
         (window as any).__goflowPendingEdgeHighlights = [];
@@ -1299,7 +719,16 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           });
         }
 
-        const { nodes: flowNodes, edges: flowEdges } = convertToFlowData(data);
+        const { nodes: flowNodes, edges: flowEdges } =
+          convertToFlowDataExternal(data, {
+            vscode,
+            detectedDirection: detectedFramework?.strategy.direction,
+            lineHighlightedEdges,
+            onHighlightEdge: handleHighlightEdge,
+            onClearHighlight: handleClearHighlight,
+            onNodeHighlight: handleNodeHighlight,
+            onClearNodeHighlight: handleClearNodeHighlight,
+          });
         const { nodes: layoutedNodes, edges: layoutedEdges } =
           await getLayoutedElements(flowNodes, flowEdges, detectedFramework);
 
@@ -1311,19 +740,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           invocation: renderInvocationCountRef.current,
         });
 
-        // Capture root function (first function node) once
-        if (!rootNodeIdRef.current) {
-          const firstFn = layoutedNodes.find((n) => n.type === "functionNode");
-          if (firstFn) {
-            rootNodeIdRef.current = firstFn.id;
-            rootCodeRef.current = (firstFn.data as FunctionNodeData).code || "";
-            rootStartLineRef.current = (firstFn.data as FunctionNodeData).line;
-            logToExtension("INFO", "[ExecutionFlow] Root function captured", {
-              rootNodeId: rootNodeIdRef.current,
-              rootStartLine: rootStartLineRef.current,
-            });
-          }
-        }
+        setRootIfUnset(layoutedNodes);
 
         setIsLoading(false);
         setError(null);
@@ -1341,7 +758,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             prevEdgeCount: prevEdgesRef.current.length,
           },
         });
-        // Expose readiness globally for nodes/editors to gate highlight actions
         (window as any).__goflowGraphReady = true;
         (window as any).__goflowSessionId = currentSessionIdRef.current;
         (window as any).__goflowEffectiveGraphReady = true;
@@ -1356,17 +772,14 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           })
         );
         midReloadRef.current = false;
-        // Clear previous buffers (avoid stale large memory retention)
         prevNodesRef.current = [];
         prevEdgesRef.current = [];
-        // Process any externally queued node highlight (from early line clicks)
         try {
           const pendingNodeId = (window as any).__goflowPendingNodeHighlight;
           if (pendingNodeId) {
             delete (window as any).__goflowPendingNodeHighlight;
             handleNodeHighlight(pendingNodeId);
           }
-          // Process any queued edge highlights
           const pendingEdges =
             (window as any).__goflowPendingEdgeHighlights || [];
           if (Array.isArray(pendingEdges) && pendingEdges.length > 0) {
@@ -1377,7 +790,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
           }
         } catch {}
 
-        // BUILD STATIC TRACE (now passes nodes for code enrichment)
         buildStaticExecutionTrace(layoutedEdges, layoutedNodes);
         const elapsed = performance.now() - renderStartRef.current;
         logToExtension("INFO", "[FlowGraph] Graph layout completed", {
@@ -1406,9 +818,17 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
       setNodes,
       setEdges,
       detectedFramework,
-      convertToFlowData,
       getLayoutedElements,
       buildStaticExecutionTrace,
+      lineHighlightedEdges,
+      handleHighlightEdge,
+      handleClearHighlight,
+      handleNodeHighlight,
+      handleClearNodeHighlight,
+      isGraphReady,
+      nodes,
+      logToExtension,
+      setRootIfUnset,
     ]
   );
 
@@ -1478,7 +898,7 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
       (window as any).__goflowGraphReady = false;
       (window as any).__goflowEffectiveGraphReady = false;
     }
-  }, [isGraphReady, nodes, edges]);
+  }, [isGraphReady, nodes, edges, processQueuedInteractions]);
 
   const handleAutoSort = useCallback(async () => {
     if (!detectedFramework || isAutoSorting) return;
@@ -1516,16 +936,13 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     [vscode]
   );
 
-  // Containers recalculation
   useEffect(() => {
-    const codeNodes = debouncedNodes.filter(
-      (n: { type: string }) => n.type === "functionNode"
-    );
+    const codeNodes = debouncedNodes.filter((n) => n.type === "functionNode");
     const declarationNodes = debouncedNodes.filter(
-      (n: { type: string }) => n.type === "declarationNode"
+      (n) => n.type === "declarationNode"
     );
     const currentContainers = debouncedNodes.filter(
-      (n: { type: string }) => n.type === "fileGroupContainer"
+      (n) => n.type === "fileGroupContainer"
     );
     if (codeNodes.length === 0 && declarationNodes.length === 0) {
       return;
@@ -1567,18 +984,13 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     });
   }, [debouncedNodes, calculateFileGroupContainers, setNodes]);
 
-  // Send ready once
   useEffect(() => {
     vscode.postMessage({ command: "ready" });
   }, [vscode]);
 
-  // Message listener
   useEffect(() => {
     const messageHandler = async (event: MessageEvent) => {
       const message = event.data;
-      // SAFETY: Ignore messages without a valid string command to prevent
-      // noisy "[FlowGraph] Unknown command: undefined" logs triggered by
-      // other window.postMessage sources (e.g. Monaco internals).
       if (!message || typeof message.command !== "string") {
         return;
       }
@@ -1594,7 +1006,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             );
             break;
           case "renderGraph":
-            // Instrumentation: log receipt of renderGraph and previous readiness
             Logger.info(
               `[FlowGraph] renderGraph command received (prevReady=${isGraphReady}) nodesInPayload=${
                 message.data?.nodes?.length ?? 0
@@ -1602,7 +1013,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
                 renderInvocationCountRef.current + 1
               } nextSession=${sessionCounterRef.current + 1}`
             );
-            // New session: readiness reset reason = new renderGraph request
             sessionCounterRef.current += 1;
             currentSessionIdRef.current = sessionCounterRef.current;
             (window as any).__goflowSessionId = currentSessionIdRef.current;
@@ -1614,15 +1024,11 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               prevNodeCount: nodes.length,
               prevEdgeCount: edges.length,
             });
-            // Immediately invalidate global readiness flag to prevent stale true seen by FunctionNode
             (window as any).__goflowGraphReady = false;
-            // Stamp new session id early so highlight logs can correlate during mid-reload
             (window as any).__goflowSessionId = currentSessionIdRef.current;
-            // NEW: reset effective readiness & clear global edges snapshot to avoid stale edgeCount>0
             (window as any).__goflowEffectiveGraphReady = false;
             (window as any).__goflowEdges = [];
             (window as any).__goflowEdgesClearedAt = Date.now();
-            // Buffer previous graph to allow highlights against old data during reload window
             try {
               prevNodesRef.current = nodes;
               prevEdgesRef.current = edges;
@@ -1638,7 +1044,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
               setEnableJumpToFile(message.config.enableJumpToFile);
             }
             if (message.theme && typeof message.theme.isDark === "boolean") {
-              // Only accept first valid theme payload until user explicitly triggers a theme change.
               if (!(window as any).__monacoAppliedTheme) {
                 (window as any).__goflowTheme = message.theme;
               } else {
@@ -1647,7 +1052,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
                 );
               }
             } else if (message.theme) {
-              // Invalid / legacy theme object -> ignore to prevent random re-detection flicker
               Logger.debug(
                 "[FlowGraph] Ignored invalid theme payload (missing isDark boolean)"
               );
@@ -1660,240 +1064,78 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             }
             break;
           case "highlightEdge":
-            // CRITICAL FIX: Check cả React state VÀ window globals để tránh race condition
-            const globalReady = !!(window as any).__goflowGraphReady;
-            const globalEdges = (window as any).__goflowEdges;
-            const globalEdgeCount = Array.isArray(globalEdges)
-              ? globalEdges.length
-              : 0;
-            const effectiveReady =
-              isGraphReady && nodes.length > 0 && edges.length > 0;
-            const fallbackReady =
-              globalReady && globalEdgeCount > 0 && nodes.length === 0;
+            {
+              const globalReady = !!(window as any).__goflowGraphReady;
+              const globalEdges = (window as any).__goflowEdges;
+              const globalEdgeCount = Array.isArray(globalEdges)
+                ? globalEdges.length
+                : 0;
+              const effectiveReady =
+                isGraphReady && nodes.length > 0 && edges.length > 0;
+              const fallbackReady =
+                globalReady && globalEdgeCount > 0 && nodes.length === 0;
 
-            // If neither React state nor window globals are ready -> queue
-            if (!effectiveReady && !fallbackReady) {
-              queuedEdgeHighlightCountRef.current += 1;
-              const edgeQueueLen =
-                ((window as any).__goflowPendingEdgeHighlights || []).length +
-                1;
+              if (!effectiveReady && !fallbackReady) {
+                queuedEdgeHighlightCountRef.current += 1;
+                const edgeQueueLen =
+                  ((window as any).__goflowPendingEdgeHighlights || []).length +
+                  1;
+                if (
+                  queuedEdgeHighlightCountRef.current === 1 ||
+                  queuedEdgeHighlightCountRef.current % 5 === 0
+                ) {
+                  Logger.debug(
+                    `[FlowGraph] Graph not ready. Queued edge highlight ${message.sourceNodeId}->${message.targetNodeId}`,
+                    {
+                      totalQueuedEdgeEvents:
+                        queuedEdgeHighlightCountRef.current,
+                      queueLen: edgeQueueLen,
+                      reactReady: isGraphReady,
+                      reactNodeCount: nodes.length,
+                      reactEdgeCount: edges.length,
+                      globalReady,
+                      globalEdgeCount,
+                    }
+                  );
+                }
+                const pending =
+                  (window as any).__goflowPendingEdgeHighlights || [];
+                pending.push({
+                  source: message.sourceNodeId,
+                  target: message.targetNodeId,
+                });
+                (window as any).__goflowPendingEdgeHighlights = pending;
+                return;
+              }
+
               if (
-                queuedEdgeHighlightCountRef.current === 1 ||
-                queuedEdgeHighlightCountRef.current % 5 === 0
+                fallbackReady &&
+                prevNodesRef.current.length > 0 &&
+                prevEdgesRef.current.length > 0
               ) {
-                Logger.debug(
-                  `[FlowGraph] Graph not ready. Queued edge highlight ${message.sourceNodeId}->${message.targetNodeId}`,
+                Logger.info(
+                  `[FlowGraph] Using buffered graph for edge highlight (React state not synced yet)`,
                   {
-                    totalQueuedEdgeEvents: queuedEdgeHighlightCountRef.current,
-                    queueLen: edgeQueueLen,
-                    reactReady: isGraphReady,
-                    reactNodeCount: nodes.length,
-                    reactEdgeCount: edges.length,
-                    globalReady,
-                    globalEdgeCount,
+                    bufferedNodeCount: prevNodesRef.current.length,
+                    bufferedEdgeCount: prevEdgesRef.current.length,
+                    sourceNodeId: message.sourceNodeId,
+                    targetNodeId: message.targetNodeId,
                   }
                 );
+                setNodes(prevNodesRef.current);
+                setEdges(prevEdgesRef.current);
+                setIsGraphReady(true);
               }
-              const pending =
-                (window as any).__goflowPendingEdgeHighlights || [];
-              pending.push({
-                source: message.sourceNodeId,
-                target: message.targetNodeId,
-              });
-              (window as any).__goflowPendingEdgeHighlights = pending;
-              return;
-            }
 
-            // FALLBACK: Nếu React state chưa ready nhưng window globals ready -> dùng buffered data
-            if (
-              fallbackReady &&
-              prevNodesRef.current.length > 0 &&
-              prevEdgesRef.current.length > 0
-            ) {
-              Logger.info(
-                `[FlowGraph] Using buffered graph for edge highlight (React state not synced yet)`,
-                {
-                  bufferedNodeCount: prevNodesRef.current.length,
-                  bufferedEdgeCount: prevEdgesRef.current.length,
-                  sourceNodeId: message.sourceNodeId,
-                  targetNodeId: message.targetNodeId,
-                }
-              );
-              // Force update React state from buffered data (temporary workaround)
-              setNodes(prevNodesRef.current);
-              setEdges(prevEdgesRef.current);
-              setIsGraphReady(true);
-            }
+              handleHighlightEdge(message.sourceNodeId, message.targetNodeId);
 
-            handleHighlightEdge(message.sourceNodeId, message.targetNodeId);
-
-            // Dynamic execution flow: synthesize RETURN entry for previous call of same caller (if exists)
-            try {
-              const prevCall = lastCallEntryRef.current.get(
-                message.sourceNodeId
-              );
-              const sourceFnNodeForReturn = nodes.find(
-                (n) =>
-                  n.id === message.sourceNodeId && n.type === "functionNode"
-              );
-              const sourceCodeForReturn =
-                sourceFnNodeForReturn &&
-                (sourceFnNodeForReturn.data as FunctionNodeData).code
-                  ? (sourceFnNodeForReturn.data as FunctionNodeData).code
-                  : undefined;
-
-              // Helper: find next call line after a given relative line (restricted to scanning until new call line)
-              const findNextCallLineAfterDynamic = (
-                sourceCode: string,
-                afterRelLine: number,
-                clampToRelLine?: number
-              ): number | undefined => {
-                const lines = sourceCode.split("\n");
-                const callRegex = /\b([A-Za-z_][A-Za-z0-9_]*)\s*\(/;
-                for (let i = afterRelLine; i < lines.length; i++) {
-                  const raw = lines[i];
-                  const trimmed = raw.trim();
-                  if (!trimmed || trimmed.startsWith("//")) continue;
-                  if (trimmed.startsWith("func ")) continue;
-                  if (callRegex.test(raw)) {
-                    const candidate = i + 1;
-                    if (
-                      typeof clampToRelLine === "number" &&
-                      candidate > clampToRelLine
-                    )
-                      return clampToRelLine; // clamp
-                    return candidate;
-                  }
-                  if (
-                    typeof clampToRelLine === "number" &&
-                    i + 1 >= clampToRelLine
-                  ) {
-                    // reached clamp boundary without finding another call line
-                    return clampToRelLine;
-                  }
-                }
-                return clampToRelLine;
-              };
-
-              if (
-                prevCall &&
-                sourceCodeForReturn &&
-                typeof prevCall.sourceCallLine === "number"
-              ) {
-                const newCallRelLine =
-                  typeof message.sourceCallLine === "number"
-                    ? message.sourceCallLine
-                    : undefined;
-                const nextCallLine =
-                  typeof newCallRelLine === "number"
-                    ? newCallRelLine
-                    : findNextCallLineAfterDynamic(
-                        sourceCodeForReturn,
-                        prevCall.sourceCallLine,
-                        undefined
-                      );
-
-                // Construct RETURN entry segment: (prevCallLine+1) .. (nextCallLine)
-                const startSeg = prevCall.sourceCallLine + 1;
-                const endSeg =
-                  typeof nextCallLine === "number"
-                    ? nextCallLine
-                    : prevCall.sourceCallLine + 1;
-
-                setExecutionTrace((prev) => [
-                  ...prev,
-                  {
-                    step: prev.length + 1,
-                    type: "return",
-                    sourceNodeId: prevCall.sourceNodeId,
-                    targetNodeId: prevCall.targetNodeId,
-                    sourceCode: sourceCodeForReturn,
-                    sourceStartLine: (
-                      sourceFnNodeForReturn?.data as
-                        | FunctionNodeData
-                        | undefined
-                    )?.line,
-                    timestamp: Date.now(),
-                    highlightSegmentStartRelativeLine: startSeg,
-                    highlightSegmentEndRelativeLine: endSeg,
-                  },
-                ]);
-              }
-            } catch (e) {
-              logToExtension(
-                "WARN",
-                "[ExecutionFlow] Failed to synthesize return entry",
-                e
-              );
-            }
-
-            // Dynamic execution flow: add CALL entry
-            try {
-              const sourceFnNode = nodes.find(
-                (n) =>
-                  n.id === message.sourceNodeId && n.type === "functionNode"
-              );
-              const targetFnNode = nodes.find(
-                (n) =>
-                  n.id === message.targetNodeId && n.type === "functionNode"
-              );
-
-              const sourceCode =
-                sourceFnNode && (sourceFnNode.data as FunctionNodeData).code
-                  ? (sourceFnNode.data as FunctionNodeData).code
-                  : undefined;
-              const targetCode =
-                targetFnNode && (targetFnNode.data as FunctionNodeData).code
-                  ? (targetFnNode.data as FunctionNodeData).code
-                  : undefined;
-
-              const sourceLines = sourceCode ? sourceCode.split("\n") : [];
-              const sourceLineContent =
-                sourceLines[(message.sourceCallLine || 0) - 1] || "";
-
-              // Dynamic: highlight all executed lines in caller (source) up to call site
-              const callerProgressLine =
+              // Delegate dynamic execution trace update to hook
+              handleCallEdge(
+                message.sourceNodeId,
+                message.targetNodeId,
                 typeof message.sourceCallLine === "number"
                   ? message.sourceCallLine
-                  : undefined;
-
-              setExecutionTrace((prev) => {
-                const newCallEntry: ExecutionTraceEntry = {
-                  step: prev.length + 1,
-                  type: "call",
-                  sourceNodeId: message.sourceNodeId,
-                  targetNodeId: message.targetNodeId,
-                  sourceCallLine:
-                    typeof message.sourceCallLine === "number"
-                      ? message.sourceCallLine
-                      : undefined,
-                  sourceLineContent: sourceLineContent,
-                  sourceCode,
-                  targetCode,
-                  sourceStartLine: sourceFnNode
-                    ? (sourceFnNode.data as FunctionNodeData).line
-                    : undefined,
-                  targetStartLine: targetFnNode
-                    ? (targetFnNode.data as FunctionNodeData).line
-                    : undefined,
-                  timestamp: Date.now(),
-                  highlightUntilRelativeLine: callerProgressLine,
-                  highlightSegmentStartRelativeLine:
-                    typeof message.sourceCallLine === "number" ? 1 : undefined,
-                  highlightSegmentEndRelativeLine: callerProgressLine,
-                };
-                // Update lastCallEntryRef for this caller
-                lastCallEntryRef.current.set(
-                  message.sourceNodeId,
-                  newCallEntry
-                );
-                return [...prev, newCallEntry];
-              });
-            } catch (e) {
-              logToExtension(
-                "WARN",
-                "[ExecutionFlow] Failed to append call entry",
-                e
+                  : undefined
               );
             }
             break;
@@ -1901,7 +1143,6 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
             handleClearHighlight();
             break;
           case "recordTraceLine":
-            // Unresolved calls on a line: add one 'unresolved' entry per call name
             if (
               Array.isArray(message.functionCalls) &&
               typeof message.relativeLine === "number"
@@ -1919,25 +1160,12 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
                 sourceLines[message.relativeLine - 1] ||
                 message.lineContent ||
                 "";
-
-              message.functionCalls.forEach((fnName: string) => {
-                setExecutionTrace((prev) => [
-                  ...prev,
-                  {
-                    step: prev.length + 1,
-                    type: "unresolved",
-                    sourceNodeId: message.sourceNodeId,
-                    targetNodeId: `unresolved_${fnName}`,
-                    sourceCallLine: message.relativeLine,
-                    sourceLineContent: srcLineContent,
-                    sourceCode,
-                    sourceStartLine: sourceFnNode
-                      ? (sourceFnNode.data as FunctionNodeData).line
-                      : undefined,
-                    timestamp: Date.now(),
-                  },
-                ]);
-              });
+              recordUnresolvedCalls(
+                message.sourceNodeId,
+                message.relativeLine,
+                message.functionCalls,
+                srcLineContent
+              );
             }
             break;
           case "recordTraceLineRaw":
@@ -1955,30 +1183,17 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
                 sourceLines[message.relativeLine - 1] ||
                 message.lineContent ||
                 "";
-
-              setExecutionTrace((prev) => [
-                ...prev,
-                {
-                  step: prev.length + 1,
-                  type: "raw",
-                  sourceNodeId: message.sourceNodeId,
-                  targetNodeId: `raw_line_${message.relativeLine}`,
-                  sourceCallLine: message.relativeLine,
-                  sourceLineContent: srcLineContent,
-                  sourceCode,
-                  sourceStartLine: sourceFnNode
-                    ? (sourceFnNode.data as FunctionNodeData).line
-                    : undefined,
-                  timestamp: Date.now(),
-                },
-              ]);
+              recordRawLine(
+                message.sourceNodeId,
+                message.relativeLine,
+                srcLineContent
+              );
             }
             break;
           case "tracePathForLineClick":
             handleNodeHighlight(message.targetNodeId);
             break;
           default:
-            // Only log truly unknown non-empty commands (filter already removed undefined above)
             Logger.debug(
               `[FlowGraph] Ignored unknown command: ${message.command}`
             );
@@ -1996,6 +1211,14 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
     handleHighlightEdge,
     handleClearHighlight,
     handleNodeHighlight,
+    isGraphReady,
+    nodes,
+    edges,
+    handleCallEdge,
+    recordUnresolvedCalls,
+    recordRawLine,
+    setNodes,
+    setEdges,
   ]);
 
   return (
@@ -2201,14 +1424,13 @@ const FlowGraph: React.FC<FlowGraphProps> = ({ vscode }) => {
         isOpen={isTraceDrawerOpen}
         onClose={() => setIsTraceDrawerOpen(false)}
         trace={executionTrace}
-        rootNodeId={rootNodeIdRef.current}
-        rootCode={rootCodeRef.current}
-        rootStartLine={rootStartLineRef.current}
+        rootNodeId={rootNodeId}
+        rootCode={rootCode}
+        rootStartLine={rootStartLine}
         onClear={() => {
-          setExecutionTrace([]);
+          clearTrace();
         }}
         onJumpToNode={(nodeId) => {
-          // Highlight + center viewport on node
           handleNodeHighlight(nodeId);
           try {
             const target = nodes.find((n) => n.id === nodeId);

@@ -17,20 +17,20 @@ export interface Node {
   endLine?: number;
   kind: vscode.SymbolKind;
   code?: string;
-  language?: string; // Ngôn ngữ: "go", "python", "javascript", "java"...
-  returnType?: string; // Return type từ signature
-  hasReturnValue?: boolean; // true nếu return value, false nếu void
-  isNested?: boolean; // true nếu là nested function
-  parentNodeId?: string; // ID của node cha (nếu là nested)
+  language?: string;
+  returnType?: string;
+  hasReturnValue?: boolean;
+  isNested?: boolean;
+  parentNodeId?: string;
 }
 
 export interface Edge {
   source: string;
   target: string;
   type: "calls" | "uses" | "implements";
-  hasReturnValue?: boolean; // true = solid line, false = dashed line
-  callOrder?: number; // Thứ tự gọi hàm (call forward)
-  returnOrder?: number; // Thứ tự return (return backward)
+  hasReturnValue?: boolean;
+  callOrder?: number;
+  returnOrder?: number;
 }
 
 export interface GraphData {
