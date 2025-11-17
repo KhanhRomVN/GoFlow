@@ -389,25 +389,28 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
     [editorBaseWidth]
   );
 
-  // Compute node width (shrink only, never exceed initial container width captured by Monaco)
+  // Compute node width:
+  // - Use measured editor content width (editorWidth) provided by MonacoCodeEditor
+  // - Add header horizontal padding (16 + 16) and border (2 + 2)
+  // - Never exceed the initially captured base width (editorBaseWidth)
+  // - Maintain a sane minimum width for readability
   const autoNodeWidth = useMemo(() => {
-    if (editorWidth) {
-      // Add horizontal padding for header/body borders and some safety margin
-      const padding = 48; // header + container side paddings/borders
-      const target = editorWidth + padding;
-      const min = 250;
-      const base = editorBaseWidth || target;
-      return Math.max(min, Math.min(target, base));
-    }
-    return undefined;
-  }, [editorWidth, editorBaseWidth]);
+    if (!editorWidth) return undefined;
+
+    // editorWidth already includes gutter + padding from Monaco wrapper.
+    // Use it directly to avoid double-padding causing mismatch.
+    const min = 250;
+    return Math.max(min, editorWidth);
+  }, [editorWidth]);
 
   return (
     <>
       <NodeResizer
         color={nodeData.type === "function" ? "#10b981" : "#6366f1"}
         isVisible={selected}
-        minWidth={650}
+        minWidth={
+          250
+        } /* Reduced to allow shrink-to-fit with Monaco measured width */
         minHeight={totalNodeHeight}
         maxWidth={1400}
         maxHeight={800}

@@ -310,7 +310,7 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
     }
   }, [isEditorReady, baseWidth]);
 
-  // Fit-width logic (shrink only; never grow beyond base width)
+  // Fit-width logic (allow grow & shrink; no clamp to initial base width)
   useEffect(() => {
     if (baseWidth === null) return;
     try {
@@ -318,7 +318,7 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       let longest = "";
       for (const l of lines) if (l.length > longest.length) longest = l;
 
-      // Measure text width
+      // Measure text width (monospace)
       let measured = longest.length * 7; // fallback heuristic
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
@@ -328,13 +328,14 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       }
 
       const gutterChars = 4; // lineNumbersMinChars
-      const avgChar = 7; // monospace approx
-      const gutter = gutterChars * avgChar + 8; // extra spacing
-      const padding = 24; // left/right + safety
+      const avgChar = 7;
+      const gutter = gutterChars * avgChar + 8;
+      const padding = 24;
       const target = Math.ceil(measured + gutter + padding);
 
       const min = 150;
-      const final = Math.max(min, Math.min(target, baseWidth));
+      const max = 1400;
+      const final = Math.max(min, Math.min(target, max)); // allow grow up to max
 
       setFitWidth(final);
 
@@ -350,7 +351,6 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       }
 
       if (editorRef.current) {
-        // Force layout with new width (automaticLayout sometimes lags on shrink)
         editorRef.current.layout({
           width: final,
           height: editorRef.current.getLayoutInfo().height,
@@ -364,6 +364,7 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
         target,
         final,
         baseWidth,
+        growAllowed: final > baseWidth,
       });
     } catch (e) {
       Logger.warn(`[MonacoCodeEditor] Fit-width computation failed`, {
@@ -376,7 +377,11 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   return (
     <div
       ref={wrapperRef}
-      style={{ width: fitWidth ? `${fitWidth}px` : "100%", height }}
+      style={{
+        width: fitWidth ? `${fitWidth}px` : "100%",
+        height,
+        maxWidth: "1400px",
+      }}
     >
       <Editor
         height="100%"

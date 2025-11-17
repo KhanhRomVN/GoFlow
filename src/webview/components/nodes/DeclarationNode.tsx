@@ -73,7 +73,7 @@ const DeclarationNode: React.FC<NodeProps> = ({ data, selected }) => {
     }
   }, [baseWidth]);
 
-  // Fit-width logic (shrink only, never grow beyond base width)
+  // Fit-width logic (grow & shrink independently of initial base width)
   useEffect(() => {
     if (baseWidth === null) return;
     try {
@@ -81,7 +81,8 @@ const DeclarationNode: React.FC<NodeProps> = ({ data, selected }) => {
       let longest = "";
       for (const l of lines) if (l.length > longest.length) longest = l;
 
-      let measured = longest.length * 7; // heuristic fallback
+      // Measure longest line monospace width
+      let measured = longest.length * 7; // fallback heuristic
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
       if (ctx) {
@@ -89,12 +90,18 @@ const DeclarationNode: React.FC<NodeProps> = ({ data, selected }) => {
         measured = ctx.measureText(longest || " ").width;
       }
 
-      const padding = 32; // horizontal padding + borders
-      const target = Math.ceil(measured + padding);
+      const gutter = 0; // no Monaco here, keep minimal extra
+      const padding = 32; // header + body horizontal padding + borders
+      const target = Math.ceil(measured + gutter + padding);
+
       const min = 220;
-      const final = Math.max(min, Math.min(target, baseWidth));
+      const max = 1200;
+      const final = Math.max(min, Math.min(target, max));
+
       setFitWidth(final);
-    } catch {}
+    } catch (e) {
+      // swallow measurement errors
+    }
   }, [debouncedCode, baseWidth]);
 
   // Dynamic height (fit content up to max lines)

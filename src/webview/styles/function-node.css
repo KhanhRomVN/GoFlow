@@ -4,10 +4,10 @@
   background: var(--vscode-editor-background);
   border: 2px solid var(--vscode-panel-border);
   border-radius: 8px;
-  width: 100%;
-  height: fit-content;  /* ✅ Fit content instead of 100% */
-  min-width: 650px;
-  min-height: 206px;  /* ✅ Minimum height = header + min editor + padding */
+  width: auto; /* Allow inline width from React to control */
+  height: fit-content;
+  min-width: 250px; /* Reduced to enable shrink-to-fit */
+  min-height: 206px; /* Header + min editor + padding */
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   overflow: hidden;
   transition: all 0.3s ease;
@@ -116,12 +116,12 @@
 
 .code-entity-node-monaco-wrapper {
   width: 100%;
-  min-width: 600px;
+  min-width: 0; /* Allow shrinking with measured editor width */
   background: var(--vscode-editor-background);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  height: 100%; /* Chiếm đầy parent */
+  height: 100%; /* Fill parent height */
 }
 
 /* Code Container with Line Numbers */
@@ -129,7 +129,7 @@
   display: flex;
   background: var(--vscode-editor-background);
   width: 100%;
-  min-width: 600px;
+  min-width: 0; /* Remove enforced width */
 }
 
 .code-entity-node-line-numbers {
@@ -261,7 +261,7 @@
 /* Monaco Editor Wrapper */
 .code-entity-node-monaco-wrapper {
   width: 100%;
-  min-width: 600px;
+  min-width: 0; /* Allow shrink */
   background: var(--vscode-editor-background);
   overflow: hidden;
   display: flex;
