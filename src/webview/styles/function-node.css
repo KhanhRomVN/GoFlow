@@ -7,7 +7,9 @@
   width: auto; /* Allow inline width from React to control */
   height: fit-content;
   min-width: 250px; /* Reduced to enable shrink-to-fit */
-  min-height: 206px; /* Header + min editor + padding */
+  /* Adjusted: remove artificial 206px forcing extra blank space for short (6-8 line) functions.
+     New min height = header (56px) + Monaco minimum (~73px for 3 lines) ≈ 129px -> rounded to 130px */
+  min-height: 130px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   overflow: hidden;
   transition: all 0.3s ease;

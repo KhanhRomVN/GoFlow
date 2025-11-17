@@ -160,7 +160,7 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
   const [isResizing, setIsResizing] = useState(false);
   const [isNodeHighlighted, setIsNodeHighlighted] = useState(false);
   const [editorHeight, setEditorHeight] = useState(150);
-  const [totalNodeHeight, setTotalNodeHeight] = useState(206); // Initial: 56 (header) + 150 (editor) + 8 (padding)
+  const [totalNodeHeight, setTotalNodeHeight] = useState(206); // Initial: 56 (header) + 150 (editor) (no extra padding)
   const [editorWidth, setEditorWidth] = useState<number | null>(null);
   const [editorBaseWidth, setEditorBaseWidth] = useState<number | null>(null);
 
@@ -192,7 +192,7 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
       fnHeightChangeCount++;
 
       // Calculate new total node height
-      const newTotalHeight = 56 + height + 8; // header (56) + editor + padding (8)
+      const newTotalHeight = 56 + height; // header (56) + editor (no extra padding)
       setTotalNodeHeight(newTotalHeight);
 
       // CRITICAL: Force update React Flow node dimensions
