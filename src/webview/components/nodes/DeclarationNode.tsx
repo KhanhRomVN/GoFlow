@@ -1,6 +1,7 @@
-import React, { memo } from "react";
+import React, { memo, useState, useEffect, useRef } from "react";
 import { Handle, Position, NodeProps } from "@xyflow/react";
 import "../../styles/declaration-node.css";
+import useDebounce from "../../hooks/useDebounce";
 
 const DECLARATION_COLORS = {
   class: {
@@ -49,6 +50,12 @@ interface DeclarationNodeData extends Record<string, unknown> {
 const DeclarationNode: React.FC<NodeProps> = ({ data, selected }) => {
   const nodeData = data as DeclarationNodeData;
 
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const [baseWidth, setBaseWidth] = useState<number | null>(null);
+  const [fitWidth, setFitWidth] = useState<number | null>(null);
+  const debouncedCode = useDebounce(nodeData.code, 150);
+  const [contentHeight, setContentHeight] = useState<number | null>(null);
+
   const getRelativePath = (fullPath: string): string => {
     const parts = fullPath.split(/[/\\]/);
     return parts.slice(-3).join("/");
@@ -57,6 +64,48 @@ const DeclarationNode: React.FC<NodeProps> = ({ data, selected }) => {
   const nodeColors =
     DECLARATION_COLORS[nodeData.type as keyof typeof DECLARATION_COLORS] ||
     DECLARATION_COLORS.unknown;
+
+  // Capture initial (default) width once
+  useEffect(() => {
+    if (wrapperRef.current && baseWidth === null) {
+      const w = wrapperRef.current.getBoundingClientRect().width;
+      setBaseWidth(Math.ceil(w));
+    }
+  }, [baseWidth]);
+
+  // Fit-width logic (shrink only, never grow beyond base width)
+  useEffect(() => {
+    if (baseWidth === null) return;
+    try {
+      const lines = (debouncedCode || "").split(/\r?\n/);
+      let longest = "";
+      for (const l of lines) if (l.length > longest.length) longest = l;
+
+      let measured = longest.length * 7; // heuristic fallback
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.font = `11px 'Courier New', monospace`;
+        measured = ctx.measureText(longest || " ").width;
+      }
+
+      const padding = 32; // horizontal padding + borders
+      const target = Math.ceil(measured + padding);
+      const min = 220;
+      const final = Math.max(min, Math.min(target, baseWidth));
+      setFitWidth(final);
+    } catch {}
+  }, [debouncedCode, baseWidth]);
+
+  // Dynamic height (fit content up to max lines)
+  useEffect(() => {
+    const lines = (debouncedCode || "").split(/\r?\n/);
+    const lineHeight = 16; // ~1.5 * 11px font
+    const maxLines = 18;
+    const effectiveLines = Math.min(lines.length, maxLines);
+    const h = effectiveLines * lineHeight + 12 + 12; // top/bottom padding from CSS (12px each)
+    setContentHeight(h);
+  }, [debouncedCode]);
 
   const getLanguageSpecificBadge = (): string => {
     const language = nodeData.language || "unknown";
@@ -83,8 +132,10 @@ const DeclarationNode: React.FC<NodeProps> = ({ data, selected }) => {
   return (
     <>
       <div
+        ref={wrapperRef}
         className={`declaration-node-container ${selected ? "selected" : ""}`}
         data-type="declarationNode"
+        style={fitWidth ? { width: `${fitWidth}px` } : undefined}
       >
         <Handle
           type="target"
@@ -126,7 +177,18 @@ const DeclarationNode: React.FC<NodeProps> = ({ data, selected }) => {
           )}
         </div>
 
-        <div className="declaration-node-body">
+        <div
+          className="declaration-node-body"
+          style={
+            contentHeight
+              ? {
+                  height: `${contentHeight}px`,
+                  maxHeight: `${contentHeight}px`,
+                  overflowY: "hidden",
+                }
+              : undefined
+          }
+        >
           <pre
             className="declaration-node-code"
             onMouseDown={(e) => {

@@ -1,4 +1,11 @@
-import React, { memo, useState, useCallback, useRef, useEffect } from "react";
+import React, {
+  memo,
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  useMemo,
+} from "react";
 import { Handle, Position, NodeProps, NodeResizer } from "@xyflow/react";
 import MonacoCodeEditor from "../editors/MonacoCodeEditor";
 import "../../styles/function-node.css";
@@ -154,6 +161,8 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
   const [isNodeHighlighted, setIsNodeHighlighted] = useState(false);
   const [editorHeight, setEditorHeight] = useState(150);
   const [totalNodeHeight, setTotalNodeHeight] = useState(206); // Initial: 56 (header) + 150 (editor) + 8 (padding)
+  const [editorWidth, setEditorWidth] = useState<number | null>(null);
+  const [editorBaseWidth, setEditorBaseWidth] = useState<number | null>(null);
 
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const nodeRef = useRef<HTMLDivElement>(null);
@@ -370,6 +379,29 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
     [nodeData, isNodeHighlighted]
   );
 
+  const handleEditorWidthChange = useCallback(
+    (width: number, baseWidth: number) => {
+      setEditorWidth(width);
+      if (editorBaseWidth === null) {
+        setEditorBaseWidth(baseWidth);
+      }
+    },
+    [editorBaseWidth]
+  );
+
+  // Compute node width (shrink only, never exceed initial container width captured by Monaco)
+  const autoNodeWidth = useMemo(() => {
+    if (editorWidth) {
+      // Add horizontal padding for header/body borders and some safety margin
+      const padding = 48; // header + container side paddings/borders
+      const target = editorWidth + padding;
+      const min = 250;
+      const base = editorBaseWidth || target;
+      return Math.max(min, Math.min(target, base));
+    }
+    return undefined;
+  }, [editorWidth, editorBaseWidth]);
+
   return (
     <>
       <NodeResizer
@@ -401,6 +433,7 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
           lineHighlightedEdges.size > 0 ? "line-highlighted" : ""
         } ${true ? "move-mode" : ""}`}
         data-type="functionNode"
+        style={autoNodeWidth ? { width: `${autoNodeWidth}px` } : undefined}
         onClick={handleNodeClick}
         onMouseDown={(e) => {
           // Ở chế độ đứng yên: chặn drag ReactFlow (cho phép chọn text trong editor)
@@ -559,6 +592,7 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
               lineNumber={nodeData.line}
               onLineClick={handleLineClick}
               onEditorHeightChange={handleEditorHeightChange}
+              onEditorWidthChange={handleEditorWidthChange}
               nodeId={nodeData.id}
               allEdges={(window as any).__goflowEdges || []}
               fadeFromLine={nodeData.fadeFromLine}

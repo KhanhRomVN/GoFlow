@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Editor, { loader } from "@monaco-editor/react";
 import { Logger } from "../../../utils/webviewLogger";
+import useDebounce from "../../hooks/useDebounce";
 
 // Configure Monaco to use local workers in VSCode webview
 declare global {
@@ -21,6 +22,7 @@ interface MonacoCodeEditorProps {
   lineNumber?: number;
   onLineClick?: (lineNumber: number, lineContent: string) => void;
   onEditorHeightChange?: (height: number) => void;
+  onEditorWidthChange?: (width: number, baseWidth: number) => void;
   nodeId?: string;
   allEdges?: any[];
   fadeFromLine?: number;
@@ -51,8 +53,14 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   segmentStartLine,
   segmentEndLine,
   nodeId,
+  onEditorWidthChange,
 }) => {
   const [isEditorReady, setIsEditorReady] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const editorRef = useRef<any>(null);
+  const [baseWidth, setBaseWidth] = useState<number | null>(null);
+  const [fitWidth, setFitWidth] = useState<number | null>(null);
+  const debouncedValue = useDebounce(value, 150);
 
   // Render counter instrumentation
   try {
@@ -252,6 +260,8 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
     }
 
     // Dynamic height calculation (unchanged)
+    editorRef.current = editor;
+
     const lineHeight = 19;
     const maxLines = 25;
     const maxHeight = lineHeight * maxLines;
@@ -291,8 +301,83 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
     }
   };
 
+  // Capture initial base width once editor ready
+  useEffect(() => {
+    if (wrapperRef.current && baseWidth === null) {
+      const w = wrapperRef.current.getBoundingClientRect().width;
+      setBaseWidth(Math.ceil(w));
+      Logger.debug(`[MonacoCodeEditor] Base width captured`, { nodeId, w });
+    }
+  }, [isEditorReady, baseWidth]);
+
+  // Fit-width logic (shrink only; never grow beyond base width)
+  useEffect(() => {
+    if (baseWidth === null) return;
+    try {
+      const lines = (debouncedValue || "").split(/\r?\n/);
+      let longest = "";
+      for (const l of lines) if (l.length > longest.length) longest = l;
+
+      // Measure text width
+      let measured = longest.length * 7; // fallback heuristic
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.font = `12px 'Courier New', monospace`;
+        measured = ctx.measureText(longest || " ").width;
+      }
+
+      const gutterChars = 4; // lineNumbersMinChars
+      const avgChar = 7; // monospace approx
+      const gutter = gutterChars * avgChar + 8; // extra spacing
+      const padding = 24; // left/right + safety
+      const target = Math.ceil(measured + gutter + padding);
+
+      const min = 150;
+      const final = Math.max(min, Math.min(target, baseWidth));
+
+      setFitWidth(final);
+
+      if (onEditorWidthChange) {
+        try {
+          onEditorWidthChange(final, baseWidth);
+        } catch (cbErr) {
+          Logger.warn(`[MonacoCodeEditor] onEditorWidthChange failed`, {
+            nodeId,
+            error: cbErr instanceof Error ? cbErr.message : String(cbErr),
+          });
+        }
+      }
+
+      if (editorRef.current) {
+        // Force layout with new width (automaticLayout sometimes lags on shrink)
+        editorRef.current.layout({
+          width: final,
+          height: editorRef.current.getLayoutInfo().height,
+        });
+      }
+
+      Logger.debug(`[MonacoCodeEditor] Fit width recalculated`, {
+        nodeId,
+        longestLen: longest.length,
+        measured,
+        target,
+        final,
+        baseWidth,
+      });
+    } catch (e) {
+      Logger.warn(`[MonacoCodeEditor] Fit-width computation failed`, {
+        nodeId,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }, [debouncedValue, baseWidth]);
+
   return (
-    <div style={{ width: "100%", height }}>
+    <div
+      ref={wrapperRef}
+      style={{ width: fitWidth ? `${fitWidth}px` : "100%", height }}
+    >
       <Editor
         height="100%"
         language={language}
