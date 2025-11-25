@@ -1,12 +1,15 @@
 /* src/webview/styles/file-group-container.css */
 
 .file-group-container {
-  border: 2px dashed #fbbf24;
-  border-radius: 12px;
-  background: rgba(251, 191, 36, 0.05);
-  pointer-events: none;
-  position: relative;
-  z-index: 0;
+ border: 2px dashed #fbbf24;
+ border-radius: 12px;
+ background: rgba(251, 191, 36, 0.05);
+ pointer-events: none;
+ position: relative;
+ z-index: 0;
+ box-sizing: border-box;
+ width: 100%;
+ height: 100%;
 }
 
 .file-group-container-header {

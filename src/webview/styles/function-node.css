@@ -17,11 +17,12 @@
   flex-direction: column;
   position: relative;
   z-index: 1;
+  box-sizing: border-box; /* Ensure width/height include border for alignment with resizer outline */
 }
 
 .code-entity-node-container:hover {
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  transform: translateY(-2px);
+  /* Removed translateY to keep border aligned with NodeResizer outline */
 }
 
 .code-entity-node-container.resizing {
@@ -618,9 +619,8 @@
 }
 
 .code-entity-node-container.move-mode {
-  cursor: move;
-  box-shadow: 0 0 0 3px rgba(99,102,241,0.4), 0 12px 28px rgba(0,0,0,0.25);
-  transition: box-shadow .25s ease;
+ cursor: move;
+ transition: box-shadow .25s ease;
 }
 
 .code-entity-node-container.move-mode .monaco-editor,

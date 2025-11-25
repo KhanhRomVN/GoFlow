@@ -6,7 +6,7 @@ import React, {
   useEffect,
   useMemo,
 } from "react";
-import { Handle, Position, NodeProps, NodeResizer } from "@xyflow/react";
+import { Handle, Position, NodeProps } from "@xyflow/react";
 import MonacoCodeEditor from "../editors/MonacoCodeEditor";
 import "../../styles/function-node.css";
 import { Logger } from "../../../utils/webviewLogger";
@@ -405,29 +405,7 @@ const FunctionNode: React.FC<NodeProps> = ({ data, selected, id }) => {
 
   return (
     <>
-      <NodeResizer
-        color={nodeData.type === "function" ? "#10b981" : "#6366f1"}
-        isVisible={selected}
-        minWidth={
-          250
-        } /* Reduced to allow shrink-to-fit with Monaco measured width */
-        minHeight={totalNodeHeight}
-        maxWidth={1400}
-        maxHeight={800}
-        handleStyle={{
-          width: 10,
-          height: 10,
-          borderRadius: "50%",
-          backgroundColor: nodeData.type === "function" ? "#10b981" : "#6366f1",
-          border: "2px solid white",
-        }}
-        lineStyle={{
-          borderWidth: 2,
-          borderColor: nodeData.type === "function" ? "#10b981" : "#6366f1",
-        }}
-        onResizeStart={() => setIsResizing(true)}
-        onResizeEnd={() => setIsResizing(false)}
-      />
+      {/* NodeResizer disabled - outline removed */}
 
       <div
         className={`code-entity-node-container ${
